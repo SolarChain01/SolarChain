@@ -16,15 +16,8 @@ This project enables a decentralized platform for trading surplus solar energy u
 Our platform ensures transparency, security, and efficiency using blockchain technology.
 ![blockchain.png](main%2Fstatic%2FResources%2Fimages%2Fblockchain.png)
 
-<h2>Project Demonstration</h2>
-
-<p>
-  <em>This video demonstrates the core working of SolarChain and was fully created by me.</em>
-</p>
-
-<iframe src="https://drive.google.com/file/d/1gakpLnz2GM6_W9TWBbDHL0gJ-LQ_Z9TY/preview" 
-        width="640" height="480" allow="autoplay">
-</iframe>
+# Project Demonstration
+[![Watch the video](https://img.youtube.com/vi/7c_HX9gdSLQ/0.jpg)](https://youtu.be/7c_HX9gdSLQ)
 
 
 # Project Structure
