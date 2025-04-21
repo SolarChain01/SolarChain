@@ -18,7 +18,7 @@ Our platform ensures transparency, security, and efficiency using blockchain tec
 
 # Project demonstration
 
-https://github.com/user-attachments/assets/1e6e6578-01d7-4ec0-8f9c-53e3503350ed
+https://github.com/user-attachments/assets/db471aab-fb2c-4275-aa5f-2092dedd6da2
 
 # Project Structure
 
