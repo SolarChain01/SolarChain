@@ -16,8 +16,8 @@ This project enables a decentralized platform for trading surplus solar energy u
 Our platform ensures transparency, security, and efficiency using blockchain technology.
 ![blockchain.png](main%2Fstatic%2FResources%2Fimages%2Fblockchain.png)
 
-# Project Demonstration
-[![Watch the video](https://img.youtube.com/vi/7c_HX9gdSLQ/0.jpg)](https://youtu.be/7c_HX9gdSLQ)
+# Website Demonstration
+https://github.com/user-attachments/assets/075d0dbf-47db-49fa-bfe5-ac04d5c62c03
 
 
 # Project Structure
