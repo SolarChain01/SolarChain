@@ -17,8 +17,7 @@ Our platform ensures transparency, security, and efficiency using blockchain tec
 ![blockchain.png](main%2Fstatic%2FResources%2Fimages%2Fblockchain.png)
 
 # Website Demonstration
-[https://github.com/user-attachments/assets/075d0dbf-47db-49fa-bfe5-ac04d5c62c03
-](https://github.com/SolarChain01/SolarChain/releases/download/untagged-5ca3a897d70350e1bb18/demo.mp4)
+https://github.com/shantnu23/SolarChain/blob/algo-try/demo.mp4
 
 # Project Structure
 
