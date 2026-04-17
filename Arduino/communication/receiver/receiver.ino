@@ -1,20 +1,33 @@
-#include <Wire.h>
-#include <7Semi_INA219.h>
 #include <WiFi.h>
 #include <WebSocketsClient.h>
+#include <Wire.h>
+#include <7Semi_INA219.h>
+
+#define CONTROL_PIN 5
+#define JOULES_PER_UNIT 5.0
 
 #define SDA_PIN 21
 #define SCL_PIN 22
-#define CONTROL_PIN 5
 
-#define JOULES_PER_UNIT 5.0
+#define LED_G 19
+#define LED_R 18
 
 INA219_7Semi ina(0x40);
 
-const char* ssid = "vivo 1951";
-const char* password = "arpit2005";
+const char* ssid = "I have internet";
+const char* password = "digak628@_99";
 
-const char* host = "192.168.0.19";
+float voltage = 0;
+float current = 0;
+bool connect_status = 0;
+
+float vBus_V     = 0;
+float vShunt_mV  = 0;
+float current_mA = 0;
+float power_mW   = 0;
+bool ovf         = false;
+
+const char* host = "10.139.47.171";
 const uint16_t port = 5000;
 
 WebSocketsClient webSocket;
@@ -33,11 +46,7 @@ void startReceive(float joules)
 {
     targetEnergy_J = joules;
     totalEnergy_J = 0;
-
     lastTime = millis();
-
-    digitalWrite(CONTROL_PIN, LOW);
-
     transferActive = true;
 
     Serial.print("Receiving energy target: ");
@@ -49,14 +58,13 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length)
 {
     switch(type)
     {
-
         case WStype_CONNECTED:
         {
             Serial.println("Connected to server");
+            connect_status = 1;
 
             mac = WiFi.macAddress();
             webSocket.sendTXT("REGISTER:" + mac);
-
             break;
         }
 
@@ -70,7 +78,6 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length)
             if (msg.startsWith("ROLE:"))
             {
                 role = msg.substring(5);
-
                 Serial.print("Role assigned: ");
                 Serial.println(role);
             }
@@ -78,17 +85,15 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length)
             if (msg.startsWith("UNITS:"))
             {
                 int units = msg.substring(6).toInt();
+                float joules = units * JOULES_PER_UNIT;
 
                 Serial.print("Units Input: ");
                 Serial.println(units);
-
-                float joules = units * JOULES_PER_UNIT;
 
                 Serial.print("Converted Joules: ");
                 Serial.println(joules);
 
                 startReceive(joules);
-
                 webSocket.sendTXT("UNITS_RECEIVED");
             }
 
@@ -98,6 +103,8 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length)
         case WStype_DISCONNECTED:
         {
             Serial.println("Disconnected from server");
+            Serial.println(WiFi.localIP());
+            connect_status = 0;
             break;
         }
 
@@ -111,18 +118,26 @@ void setup()
     Serial.begin(115200);
 
     Wire.begin(SDA_PIN, SCL_PIN);
+    ina.begin(&Wire);
 
+    bool range16V = false;
+    uint8_t pga   = 3;
+    uint8_t badc  = 0x0B;
+    uint8_t sadc  = 0x0B;
+    uint8_t mode  = 0x07;
+
+    ina.configure(range16V, pga, badc, sadc, mode);
+
+    float maxExpected_A = 2.0;
+    float shunt_Ohms    = 0.1;
+    ina.calibrateAuto(maxExpected_A, shunt_Ohms);
+
+    pinMode(LED_G, OUTPUT);
+    pinMode(LED_R, OUTPUT);
     pinMode(CONTROL_PIN, OUTPUT);
-    digitalWrite(CONTROL_PIN, HIGH);
+    digitalWrite(CONTROL_PIN, LOW);
 
-    if (!ina.begin(&Wire))
-    {
-        Serial.println("INA219 not found");
-        while(1);
-    }
-
-    ina.configure(false, 3, 0x0B, 0x0B, 0x07);
-    ina.calibrateAuto(2.0, 0.1);
+    randomSeed(esp_random());
 
     WiFi.begin(ssid, password);
 
@@ -144,21 +159,43 @@ void loop()
 {
     webSocket.loop();
 
-    if (transferActive && ina.conversionReady())
+    if (!connect_status) return;
+
+    if (ina.conversionReady())
     {
-        float power_mW = ina.readPower();
+        vBus_V     = ina.readBusVoltage();
+        vShunt_mV  = ina.readShuntVoltage();
+        current_mA = ina.readCurrent();
+        power_mW   = ina.readPower();
+        ovf        = ina.overflow();
+    }
+
+    if (transferActive)
+    {
+        digitalWrite(CONTROL_PIN, HIGH);
+        digitalWrite(LED_G, HIGH);
+        digitalWrite(LED_R, LOW);
 
         unsigned long now = millis();
         float dt_seconds = (now - lastTime) / 1000.0;
         lastTime = now;
 
-        float power_W = power_mW / 1000.0;
+        voltage = vBus_V;
+        current = current_mA / 1000;
+        float power_W = power_mW / 1000;
 
         totalEnergy_J += power_W * dt_seconds;
 
-        Serial.print("Power: ");
+        Serial.print("Voltage: ");
+        Serial.print(voltage, 3);
+
+        Serial.print(" V  Current: ");
+        Serial.print(current, 3);
+
+        Serial.print(" A  Power: ");
         Serial.print(power_W, 3);
-        Serial.print(" W   Energy: ");
+
+        Serial.print(" W  Energy: ");
         Serial.print(totalEnergy_J, 3);
         Serial.print(" / ");
         Serial.print(targetEnergy_J, 3);
@@ -166,7 +203,9 @@ void loop()
 
         if (totalEnergy_J >= targetEnergy_J)
         {
-            digitalWrite(CONTROL_PIN, HIGH);
+            digitalWrite(CONTROL_PIN, LOW);
+            digitalWrite(LED_R, HIGH);
+            digitalWrite(LED_G, LOW);
 
             transferActive = false;
 
@@ -174,6 +213,11 @@ void loop()
 
             webSocket.sendTXT("RECEIVE_COMPLETE");
         }
+    }
+    else
+    {
+        digitalWrite(LED_R, HIGH);
+        digitalWrite(LED_G, LOW);
     }
 
     delay(200);
