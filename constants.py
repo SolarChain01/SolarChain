@@ -2,6 +2,7 @@
 
 APP_NAME = "SolarChain"
 APP_VERSION = '0.0.1'
+BATTERY_CAPACITY = 36  # Max units a household battery can store
 LOCAL_NET: bool = False  # Set to False for Test Net, and True to use Local Net
 
 if LOCAL_NET:

@@ -1,59 +1,52 @@
 {% extends "layout.html" %}
+{% from "_auth_macros.html" import auth_shell, auth_alerts, auth_field, auth_submit %}
+
+{% block head %}{% include "_tailwind_head.html" %}{% endblock head %}
+
 {% block content %}
-<div class="dashboard_container">
-    <div class="login_page">
-        <h1 class="heading">Join Us</h1>
+{% call auth_shell("Join the energy network", "Create an account to start buying and selling solar energy with your community.") %}
 
-        {{ display_messages() }}
-
-        <form method="POST" action="">
-            {{ form.hidden_tag() }}
-            <div style="display: flex; flex-direction: column; gap: 1rem;">
-                <div class="form-group">
-                    {% if form.username.errors %}
-                    {{ form.username(class="input is-invalid") }}
-                    <div class="invalid-feedback">
-                        {% for error in form.username.errors %}
-                        <span>{{ error }}</span>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    {{ form.username(class="input", placeholder="Username") }}
-                    {% endif %}
-                </div>
-                <div class="form-group">
-                    {% if form.password.errors %}
-                    {{ form.password(class="input is-invalid") }}
-                    <div class="invalid-feedback">
-                        {% for error in form.password.errors %}
-                        <span>{{ error }}</span>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    {{ form.password(class="input", placeholder="Password") }}
-                    {% endif %}
-                </div>
-                <div class="form-group">
-                    {% if form.confirm_password.errors %}
-                    {{ form.confirm_password(class="input is-invalid") }}
-                    <div class="invalid-feedback">
-                        {% for error in form.confirm_password.errors %}
-                        <span>{{ error }}</span>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    {{ form.confirm_password(class="input", placeholder="Confirm Password") }}
-                    {% endif %}
-                </div>
-            </div>
-            <div class="form-container">
-                <div class="vertical_div" style="padding-top: 20px; gap:20px;">
-                    {{ form.submit(class="button") }}
-                    <a href="/login" style="text-align:center;">Already Have an Account? Log In</a>
-                </div>
-            </div>
-        </form>
+    <div class="mb-8">
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white">Create your account</h1>
+        <p class="mt-2 text-sm text-gray-400">It only takes a minute to get started.</p>
     </div>
-</div>
 
+    {{ auth_alerts() }}
+
+    <form method="POST" action="" novalidate
+          x-data="{ loading: false, pw: '', pw2: '' }" @submit="loading = true" class="space-y-5">
+        {{ form.hidden_tag() }}
+
+        {{ auth_field(form.username, "Username", "user", autocomplete="username",
+                      hint="2–20 characters.", attrs='autofocus minlength="2" maxlength="20"') }}
+
+        {{ auth_field(form.password, "Password", "lock", type="password", autocomplete="new-password",
+                      toggle=True, attrs='x-model="pw"') }}
+
+        <div>
+            {{ auth_field(form.confirm_password, "Confirm password", "shield", type="password",
+                          autocomplete="new-password", toggle=True, attrs='x-model="pw2"') }}
+            <p x-show="pw2.length > 0" x-cloak class="mt-1.5 flex items-center gap-1.5 text-xs"
+               :class="pw === pw2 ? 'text-emerald-400' : 'text-amber-400'" aria-live="polite">
+                <span x-text="pw === pw2 ? '✓ Passwords match' : 'Passwords don’t match yet'"></span>
+            </p>
+        </div>
+
+        <div class="pt-1">
+            {{ auth_submit("Create account", "Creating account…") }}
+        </div>
+    </form>
+
+    <div class="mt-8 flex items-center gap-4">
+        <div class="h-px flex-1 bg-white/10"></div>
+        <span class="text-xs uppercase tracking-wider text-gray-500">Already a member?</span>
+        <div class="h-px flex-1 bg-white/10"></div>
+    </div>
+
+    <p class="mt-6 text-center text-sm text-gray-400">
+        Already have an account?
+        <a href="{{ url_for('login') }}" class="font-semibold text-solar-blue no-underline hover:text-solar-cyan transition">Log in</a>
+    </p>
+
+{% endcall %}
 {% endblock content %}

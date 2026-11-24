@@ -9,6 +9,7 @@
     <script src="{{ url_for('static', filename='home_page.js') }}"></script>
     <script src="{{ url_for('static', filename='transaction.js') }}"></script>
 
+    {% block head %}{% endblock %}
 </head>
 
 {% from "_flash_messages.html" import display_messages %}

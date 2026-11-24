@@ -14,6 +14,7 @@ from flask_login import login_required, login_user, current_user, logout_user  #
 from sqlalchemy import or_  # SQLAlchemy operator for OR conditions
 
 from Arduino import arduiino_util
+from constants import BATTERY_CAPACITY
 from main import app, bcrypt, db, algo_client, \
     transaction_status  # Flask app instance, bcrypt for hashing, and database
 from main.blockchain.transfer_basic import begin_transaction
@@ -40,12 +41,55 @@ def home():
     """
     if not current_user.is_authenticated:
         return redirect(url_for("login"))
-    current = current_user.units
-    units = units_used(current)
-    return render_template("index.html", user_data=dashboard_info, units_used=units)
+    return render_template("index.html", **get_dashboard_context())
 
 
-def units_used(current, total: int = 36):
+def get_dashboard_context():
+    """
+    Collect everything the dashboard shows for the current user: battery state,
+    the user's own listings, trading totals, recent activity and a market snapshot.
+    """
+    capacity = BATTERY_CAPACITY
+    units = current_user.units or 0
+
+    # The user's own open sell orders
+    my_orders = list(get_user_sell_orders())
+    listed_units = sum(o.units for o in my_orders)
+
+    # Trading history: CREDIT = user bought, DEBIT = user sold
+    history = get_transaction_history(current_user.id)
+    bought = [h['row'] for h in history if h['type'] == "CREDIT"]
+    sold = [h['row'] for h in history if h['type'] == "DEBIT"]
+
+    # Live market: other users' orders whose seller can still deliver
+    market = [m for m in get_sell_orders() if m['status'] == 0]
+    market.sort(key=lambda m: m['order'].price)
+
+    return {
+        "capacity": capacity,
+        "units": units,
+        "battery_pct": min(units_used(units, capacity), 100),
+        "free_space": max(capacity - units, 0),
+        "listed_units": listed_units,
+        "sellable_units": max(units - listed_units, 0),
+        "my_order_count": len(my_orders),
+        "stats": {
+            "units_bought": sum(r.units for r in bought),
+            "spent": sum(r.price for r in bought),
+            "units_sold": sum(r.units for r in sold),
+            "earned": sum(r.price for r in sold),
+            "trades": len(history),
+        },
+        "recent_activity": history[:5],
+        "market_offers": market[:4],
+        "market_offer_count": len(market),
+        "market_units": sum(m['order'].units for m in market),
+        "best_price": market[0]['order'].price if market else None,
+        "wallet_connected": bool(current_user.wallet_public_key),
+    }
+
+
+def units_used(current, total: int = BATTERY_CAPACITY):
     """
     Calculate the percentage of units used by the user.
 
@@ -239,7 +283,7 @@ def checkout_page():
             units = form.units.data
 
             if seller.units >= units:
-                if buyer.units + form.units.data <= 36:
+                if buyer.units + form.units.data <= BATTERY_CAPACITY:
 
                     tx_id = str(uuid.uuid4())
                     transaction_status[tx_id] = "processing"
