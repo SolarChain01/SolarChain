@@ -287,7 +287,8 @@ def cancel_sell_order():
     """
     Cancel an existing sell order for the current user.
     """
-    order_id = request.args.get("order_id")
+    # Parse as int: Postgres won't compare the integer id column with a text value
+    order_id = request.args.get("order_id", type=int)
     if order_id is None:
         return redirect(url_for("home"))
 
@@ -308,7 +309,8 @@ def checkout_page():
     """
     Handle the checkout process when a user purchases units from a seller.
     """
-    order_id = request.args.get("order_id")
+    # Parse as int: Postgres won't compare the integer id column with a text value
+    order_id = request.args.get("order_id", type=int)
     if order_id is None:
         return redirect(url_for("home"))
 

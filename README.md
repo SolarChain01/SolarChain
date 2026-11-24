@@ -111,8 +111,17 @@ it is not a second web service.
    Flask. Assets are committed in `public/static` and served at their existing
    `/static/...` URLs without a build copy. Deploy (or redeploy after setting variables).
 5. Open the deployed URL and register an account. Missing tables are created
-   automatically. The hosted database starts empty: this does not upload or migrate
-   the local `instance/main.db` file.
+   automatically. The hosted database starts empty: accounts that only exist in the
+   local `instance/main.db` file can't log in until you copy them across.
+6. (Optional) Copy local accounts, listings and trade history to Neon. Put the
+   environment's `DATABASE_URL` in a git-ignored `.env.local` file (for example with
+   `vercel env pull .env.local --environment=preview`, or paste it from the Neon
+   console), then preview and apply the copy:
+   `python tools/migrate_local_db.py --env-file .env.local` (dry run, writes nothing) and
+   `python tools/migrate_local_db.py --env-file .env.local --apply`.
+   Passwords are copied as bcrypt hashes, so existing logins keep working. Re-running
+   is safe, and a username that already exists in Neon with a different password is
+   never overwritten.
 
 Accounts, listings, trade history, and purchase status use PostgreSQL and survive
 redeployments. Local runs still use SQLite when DATABASE_URL is unset. Environment
