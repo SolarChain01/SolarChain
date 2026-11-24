@@ -14,14 +14,22 @@ from flask_login import login_required, login_user, current_user, logout_user  #
 from sqlalchemy import or_  # SQLAlchemy operator for OR conditions
 
 from Arduino import arduiino_util
+from constants import BATTERY_CAPACITY, NETWORK_NAME
 from main import app, bcrypt, db, algo_client, \
     transaction_status  # Flask app instance, bcrypt for hashing, and database
+from main.blockchain.receipts import explorer_address_url, is_valid_address, send_trade_receipts
 from main.blockchain.transfer_basic import begin_transaction
 from main.forms import LoginForm, PurchaseForm, RegistrationForm, SellOrderForm  # WTForms for handling forms
 from main.models import SellOrder, TransactionHistory, User, get_sellers  # Database models and utility function
 
-# Static dashboard information for demonstration
-dashboard_info = {"balance": "50"}
+# Extra info per purchase (receipt links etc.), keyed like transaction_status: {tx_id: {...}}
+transaction_details = {}
+
+@app.context_processor
+def inject_constants():
+    """Make app-wide constants available in every template."""
+    return {"BATTERY_CAPACITY": BATTERY_CAPACITY}
+
 
 @app.route('/layout')
 def layout():
@@ -40,12 +48,55 @@ def home():
     """
     if not current_user.is_authenticated:
         return redirect(url_for("login"))
-    current = current_user.units
-    units = units_used(current)
-    return render_template("index.html", user_data=dashboard_info, units_used=units)
+    return render_template("index.html", **get_dashboard_context())
 
 
-def units_used(current, total: int = 36):
+def get_dashboard_context():
+    """
+    Collect everything the dashboard shows for the current user: battery state,
+    the user's own listings, trading totals, recent activity and a market snapshot.
+    """
+    capacity = BATTERY_CAPACITY
+    units = current_user.units or 0
+
+    # The user's own open sell orders
+    my_orders = list(get_user_sell_orders())
+    listed_units = sum(o.units for o in my_orders)
+
+    # Trading history: CREDIT = user bought, DEBIT = user sold
+    history = get_transaction_history(current_user.id)
+    bought = [h['row'] for h in history if h['type'] == "CREDIT"]
+    sold = [h['row'] for h in history if h['type'] == "DEBIT"]
+
+    # Live market: other users' orders whose seller can still deliver
+    market = [m for m in get_sell_orders() if m['status'] == 0]
+    market.sort(key=lambda m: m['order'].price)
+
+    return {
+        "capacity": capacity,
+        "units": units,
+        "battery_pct": min(units_used(units, capacity), 100),
+        "free_space": max(capacity - units, 0),
+        "listed_units": listed_units,
+        "sellable_units": max(units - listed_units, 0),
+        "my_order_count": len(my_orders),
+        "stats": {
+            "units_bought": sum(r.units for r in bought),
+            "spent": sum(r.price for r in bought),
+            "units_sold": sum(r.units for r in sold),
+            "earned": sum(r.price for r in sold),
+            "trades": len(history),
+        },
+        "recent_activity": history[:5],
+        "market_offers": market[:4],
+        "market_offer_count": len(market),
+        "market_units": sum(m['order'].units for m in market),
+        "best_price": market[0]['order'].price if market else None,
+        "wallet_connected": bool(current_user.wallet_public_key),
+    }
+
+
+def units_used(current, total: int = BATTERY_CAPACITY):
     """
     Calculate the percentage of units used by the user.
 
@@ -91,10 +142,15 @@ def account():
 @app.route('/update_account', methods=['GET', 'POST'])
 @login_required
 def update_account():
+    """Change the current user's username (2-20 characters, must be unique)."""
     if request.method == 'POST':
-        new_username = request.form.get('username')
-        if not new_username:
-            flash('Please a valid username.', 'error')
+        new_username = (request.form.get('username') or '').strip()
+        if not 2 <= len(new_username) <= 20:
+            flash('Username must be between 2 and 20 characters.', 'error')
+        elif new_username == current_user.username:
+            flash('That is already your username.', 'info')
+        elif User.query.filter_by(username=new_username).first():
+            flash('That username is already taken, please choose another.', 'error')
         else:
             current_user.username = new_username
             db.session.commit()
@@ -102,32 +158,58 @@ def update_account():
     return redirect(url_for('account'))  # Redirect to the same page after updating
 
 
-@app.route('/update_wallet', methods=['GET', 'POST'])
+@app.route('/update_wallet', methods=['POST'])
 @login_required
 def update_wallet():
-    if request.method == 'POST':
-        wallet_key = request.form.get("wallet_key")
-        if not wallet_key:
-            flash("Invalid Wallet Key!", "error")
-        else:
+    """
+    Link or unlink the user's Algorand wallet (e.g. Pera Wallet) by its public address.
+    Only the public address is stored; recovery phrases are rejected and never saved or logged.
+    """
+    if request.form.get("action") == "unlink":
+        current_user.wallet_public_key = None
+        db.session.commit()
+        flash("Wallet unlinked. You'll no longer receive on-chain trade receipts.", "success")
+        return redirect(url_for('account_wallet'))
+
+    address = (request.form.get("wallet_key") or "").strip()
+    if len(address.split()) >= 12:
+        # Looks like a 25-word recovery passphrase: refuse it and don't echo it back.
+        flash("That looks like a recovery passphrase, so it was NOT saved. Only paste your public "
+              "wallet address. Never share your passphrase with anyone.", "danger")
+    elif not is_valid_address(address):
+        flash("That isn't a valid Algorand address. It should be 58 characters, "
+              "letters A-Z and digits 2-7.", "error")
+    else:
+        if algo_client is not None:
             try:
-                acc_info = algo_client.account_info(wallet_key)
-                print(acc_info)
-                current_user.wallet_public_key = wallet_key
-                db.session.commit()
-                flash("Wallet updated successfully!", "success")
-            except Exception as e:
-                flash(f"Wallet could not be updated: {str(e)}", "error")
+                algo_client.account_info(address)  # confirms the node accepts the address
+            except Exception:
+                flash(f"Couldn't reach the {NETWORK_NAME} node to check this address; "
+                      "it was saved anyway.", "info")
+        current_user.wallet_public_key = address
+        db.session.commit()
+        flash("Wallet linked! Your trades will now appear in your wallet's activity.", "success")
     return redirect(url_for('account_wallet'))
+
 
 @app.route('/account_wallet')
 def account_wallet():
     """
-    Render the account page to display user-specific details.
+    Show the linked wallet (address, balance, explorer link) and the form to link one.
     """
     if not current_user.is_authenticated:
         return redirect(url_for("login"))
-    return render_template("account_wallet.html")
+
+    wallet = None
+    address = current_user.wallet_public_key
+    if address:
+        wallet = {"address": address, "explorer_url": explorer_address_url(address), "balance": None}
+        if algo_client is not None:
+            try:
+                wallet["balance"] = algo_client.account_info(address).get("amount", 0) / 1_000_000
+            except Exception:
+                pass  # balance just shows as unavailable
+    return render_template("account_wallet.html", title="Wallet", wallet=wallet, network=NETWORK_NAME)
 
 @app.route("/register", methods=['GET', 'POST'])
 def register():
@@ -175,13 +257,18 @@ def seller_page():
     """
     form = SellOrderForm()
     if form.validate_on_submit():
-        units, price = form.unit.data, form.price.data
-        if current_user.units >= units:
+        units, price = form.unit.data, round(form.price.data, 2)
+        already_listed = sum(o.units for o in get_user_sell_orders())
+        can_list = max((current_user.units or 0) - already_listed, 0)
+        if units <= can_list:
             order = SellOrder(user_id=current_user.id, units=units, price=price)
             db.session.add(order)
             db.session.commit()
-        else:
-            flash('Units not Available!', 'error')
+            flash(f"Listed {units} unit{'s' if units != 1 else ''} at \u20b9{price:,.2f} per unit.", "success")
+            # Redirect after a successful POST so refreshing the page can't create a duplicate listing
+            return redirect(url_for("seller_page"))
+        flash(f"You can only list {can_list} more unit{'s' if can_list != 1 else ''} "
+              "(stored units minus units already listed).", "error")
 
     sell_orders = get_user_sell_orders()
     return render_template("seller_page.html", title="Page", sell_orders=sell_orders, form=form)
@@ -207,10 +294,14 @@ def cancel_sell_order():
     if order_id is None:
         return redirect(url_for("home"))
 
-    order: SellOrder = SellOrder.query.filter_by(id=order_id).first()
+    # Only the owner can cancel their own listing
+    order: SellOrder = SellOrder.query.filter_by(id=order_id, user_id=current_user.id).first()
+    if order is None:
+        flash("That listing doesn't exist or isn't yours.", "error")
+        return redirect(url_for('seller_page'))
     db.session.delete(order)
     db.session.commit()
-    flash(f"Order: {order.id} Closed")
+    flash(f"Listing #{order.id} cancelled.", "success")
     return redirect(url_for('seller_page'))
 
 
@@ -225,11 +316,14 @@ def checkout_page():
         return redirect(url_for("home"))
 
     order: SellOrder = SellOrder.query.filter_by(id=order_id).first()
-    seller: User = User.query.filter_by(id=order.user_id).first()
+    seller: User = User.query.filter_by(id=order.user_id).first() if order else None
 
     if not order or not seller:
-        flash("Order or seller not found!", "error")
-        return redirect(url_for("home"))
+        flash("That offer is no longer available. It may have sold out or been cancelled.", "error")
+        return redirect(url_for("buyer_page"))
+    if seller.id == current_user.id:
+        flash("You can't buy from your own listing.", "error")
+        return redirect(url_for("buyer_page"))
 
     form = PurchaseForm()
     if form.validate_on_submit():
@@ -239,16 +333,10 @@ def checkout_page():
             units = form.units.data
 
             if seller.units >= units:
-                if buyer.units + form.units.data <= 36:
+                if buyer.units + form.units.data <= BATTERY_CAPACITY:
 
                     tx_id = str(uuid.uuid4())
                     transaction_status[tx_id] = "processing"
-
-                    threading.Thread(
-                        target=process_blockchain_transaction,
-                        args=(tx_id, units, seller, buyer, order, total_price),
-                        daemon=True
-                    ).start()
 
                     buyer.units += units
                     order.units -= units
@@ -270,6 +358,20 @@ def checkout_page():
 
                     db.session.commit()
 
+                    # Plain values only: ORM objects must not cross into the worker thread
+                    receipts = [
+                        {"role": "buyer", "address": buyer.wallet_public_key,
+                         "note": f"Bought {units} energy unit(s) from {seller.username} for Rs {total_price:,.2f}"},
+                        {"role": "seller", "address": seller.wallet_public_key,
+                         "note": f"Sold {units} energy unit(s) to {buyer.username} for Rs {total_price:,.2f}"},
+                    ]
+                    transaction_details[tx_id] = {"buyer_id": buyer.id, "seller_id": seller.id, "receipts": []}
+                    threading.Thread(
+                        target=process_blockchain_transaction,
+                        args=(tx_id, units, receipts),
+                        daemon=True
+                    ).start()
+
                     arduiino_util.initiate_transfer(units)
 
                     return redirect(url_for("transaction_processing", tx_id=tx_id))
@@ -281,15 +383,27 @@ def checkout_page():
             flash('Units exceeded!', 'error')
     return render_template("checkout_page.html", title="Checkout", order=order, seller=seller, form=form)
 
-def process_blockchain_transaction(tx_id, units, seller, buyer, order, total_price):
-    try:
-        with app.app_context():
-            transaction_status[tx_id] = "done"
+def process_blockchain_transaction(tx_id, units, receipts):
+    """
+    Worker thread: run the on-chain purchase, then send receipts to linked wallets.
+    The status only becomes "done" after the blockchain transaction has actually succeeded.
+    """
+    with app.app_context():
+        try:
             begin_transaction(units)
+        except Exception as e:
+            print("Blockchain transaction failed:", e)
+            transaction_status[tx_id] = "error"
+            return
 
-    except Exception as e:
-        print(e)
-        transaction_status[tx_id] = "error"
+        # Receipts are best-effort: a failure here doesn't undo a successful purchase
+        try:
+            transaction_details[tx_id]["receipts"] = send_trade_receipts(receipts)
+        except Exception as e:
+            print("Sending wallet receipts failed:", e)
+            transaction_details[tx_id]["receipt_error"] = True
+
+        transaction_status[tx_id] = "done"
 
 @app.route("/transaction_processing/<tx_id>")
 @login_required
@@ -299,8 +413,14 @@ def transaction_processing(tx_id):
 @app.route("/transaction_status/<tx_id>")
 @login_required
 def transaction_status_api(tx_id):
-    status = transaction_status.get(tx_id, "processing")
-    return {"status": status}
+    """Poll target for the processing page. Unknown ids (e.g. after a restart) report "unknown"."""
+    status = transaction_status.get(tx_id, "unknown")
+    details = transaction_details.get(tx_id, {})
+    if current_user.id not in (details.get("buyer_id"), details.get("seller_id")):
+        details = {}
+    # Only show the current user their own receipt
+    receipts = [r for r in details.get("receipts", []) if r["address"] == current_user.wallet_public_key]
+    return {"status": status, "receipts": receipts, "receipt_error": bool(details.get("receipt_error"))}
 
 def get_user_sell_orders():
     """

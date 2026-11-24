@@ -2,6 +2,7 @@
 
 APP_NAME = "SolarChain"
 APP_VERSION = '0.0.1'
+BATTERY_CAPACITY = 36  # Max units a household battery can store
 LOCAL_NET: bool = False  # Set to False for Test Net, and True to use Local Net
 
 if LOCAL_NET:
@@ -14,3 +15,7 @@ else:
     ALGOD_SERVER_ADDRESS = "https://testnet-api.4160.nodely.dev"  # Default AlgoKit LocalNet endpoint
     INDEXER_ADDRESS = "https://testnet-idx.4160.nodely.dev"
     INDEXER_TOKEN = ""
+
+# Block explorer used for "view on Pera" links (LocalNet has no public explorer)
+NETWORK_NAME = "LocalNet" if LOCAL_NET else "TestNet"
+PERA_EXPLORER_URL = None if LOCAL_NET else "https://testnet.explorer.perawallet.app"

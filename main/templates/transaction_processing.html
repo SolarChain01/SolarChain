@@ -1,66 +1,139 @@
 {% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% from "_ui.html" import CARD %}
 
 {% block content %}
-
-<div class="content">
-    <div class="page">
-
-        <h1 class="heading">Processing Transaction</h1>
-
-        <p id="status" class="label" style="text-align: center">
-            Submitting blockchain transaction...
-        </p>
-
-        <p id="redirect_info" class="label" style="opacity:0; text-align: center">
-            Redirecting to dashboard shortly...
-        </p>
-
-    </div>
-</div>
-
 <script>
-
-const tx_id = "{{ tx_id }}";
-let finished = false;
-
-async function checkStatus() {
-
-    if (finished) return;
-
-    const res = await fetch("/transaction_status/" + tx_id);
-    const data = await res.json();
-
-    if (data.status === "done") {
-
-        finished = true;
-
-        document.getElementById("status").innerText =
-            "Transaction completed successfully.";
-
-        document.getElementById("redirect_info").style.opacity = "1";
-
-        setTimeout(() => {
-            window.location.href = "/home";
-        }, 3000);
+    function txStatus() {
+        return {
+            status: 'processing',          // processing | done | error | unknown
+            receipts: [],
+            receiptError: false,
+            countdown: null,
+            timer: null,
+            init() {
+                this.check();
+                this.timer = setInterval(() => this.check(), 2000);
+            },
+            async check() {
+                if (this.status !== 'processing') return;
+                try {
+                    const res = await fetch({{ url_for('transaction_status_api', tx_id=tx_id)|tojson }});
+                    const data = await res.json();
+                    if (data.status === 'processing') return;
+                    clearInterval(this.timer);
+                    this.status = data.status;
+                    this.receipts = data.receipts || [];
+                    this.receiptError = !!data.receipt_error;
+                    // Stay on the page when there's a wallet receipt to open; otherwise head home
+                    if (data.status === 'done' && this.receipts.length === 0) this.redirect(4);
+                    if (data.status === 'error') this.redirect(6);
+                } catch (e) { /* network hiccup: keep polling */ }
+            },
+            redirect(seconds) {
+                this.countdown = seconds;
+                const t = setInterval(() => {
+                    if (--this.countdown <= 0) {
+                        clearInterval(t);
+                        window.location.href = {{ url_for('home')|tojson }};
+                    }
+                }, 1000);
+            },
+            short(a) { return a.slice(0, 6) + '…' + a.slice(-6); },
+        };
     }
-
-    if (data.status === "error") {
-
-        finished = true;
-
-        document.getElementById("status").innerText =
-            "Transaction failed.";
-
-        document.getElementById("redirect_info").style.opacity = "1";
-
-        setTimeout(() => {
-            window.location.href = "/home";
-        }, 4000);
-    }
-}
-
-setInterval(checkStatus, 2000);
-
 </script>
 
+<div class="tw-scope font-sans antialiased text-gray-100 flex items-center justify-center px-4 py-12 sm:py-20">
+    <div class="{{ CARD }} w-full max-w-lg p-6 sm:p-10 text-center motion-safe:animate-fade-in-up" x-data="txStatus()">
+
+        {# Status icon #}
+        <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full ring-1 transition"
+             :class="{
+                'bg-solar-blue/10 text-solar-blue ring-solar-blue/30': status === 'processing',
+                'bg-emerald-500/10 text-emerald-300 ring-emerald-500/30': status === 'done',
+                'bg-red-500/10 text-red-300 ring-red-500/30': status === 'error',
+                'bg-white/5 text-gray-400 ring-white/10': status === 'unknown' }">
+            <svg x-show="status === 'processing'" class="h-10 w-10 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v3a5 5 0 0 0-5 5H4z"></path>
+            </svg>
+            <span x-show="status === 'done'" x-cloak>{{ icon('check-circle', 'h-10 w-10') }}</span>
+            <span x-show="status === 'error'" x-cloak>{{ icon('alert-circle', 'h-10 w-10') }}</span>
+            <span x-show="status === 'unknown'" x-cloak>{{ icon('info', 'h-10 w-10') }}</span>
+        </div>
+
+        <div class="mt-6" aria-live="polite">
+            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white"
+                x-text="{ processing: 'Processing your purchase', done: 'Purchase complete',
+                          error: 'Blockchain transaction failed', unknown: 'Transaction not found' }[status]">Processing your purchase</h1>
+            <p class="mt-2 text-sm text-gray-400"
+               x-text="{ processing: 'Recording your purchase on the Algorand blockchain. This can take a few moments.',
+                         done: 'Your purchase is confirmed on Algorand and the energy is on its way to your battery.',
+                         error: 'Your energy units were added on SolarChain, but writing the payment to the Algorand blockchain failed.',
+                         unknown: 'This page may be from an earlier session. Check your transaction history for the result.' }[status]">
+                Recording your purchase on the Algorand blockchain. This can take a few moments.
+            </p>
+        </div>
+
+        {# Steps #}
+        <ol x-show="status !== 'unknown'" class="mx-auto mt-8 max-w-xs list-none space-y-4 text-left">
+            <li class="flex items-center gap-3">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">{{ icon('check-circle', 'h-4 w-4') }}</span>
+                <span class="text-sm text-white">Order placed</span>
+            </li>
+            <li class="flex items-center gap-3">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                      :class="{ 'bg-solar-blue/15 text-solar-blue': status === 'processing', 'bg-emerald-500/15 text-emerald-300': status === 'done', 'bg-red-500/15 text-red-300': status === 'error' }">
+                    <svg x-show="status === 'processing'" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"></path></svg>
+                    <span x-show="status === 'done'" x-cloak>{{ icon('check-circle', 'h-4 w-4') }}</span>
+                    <span x-show="status === 'error'" x-cloak>{{ icon('alert-circle', 'h-4 w-4') }}</span>
+                </span>
+                <span class="text-sm" :class="status === 'processing' ? 'text-white' : 'text-gray-300'">Recording on Algorand</span>
+            </li>
+            <li class="flex items-center gap-3">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                      :class="status === 'done' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/5 text-gray-500'">
+                    <span x-show="status === 'done'" x-cloak>{{ icon('check-circle', 'h-4 w-4') }}</span>
+                    <span x-show="status !== 'done'">{{ icon('wallet', 'h-4 w-4') }}</span>
+                </span>
+                <span class="text-sm" :class="status === 'done' ? 'text-gray-300' : 'text-gray-500'">Receipt sent to your wallet</span>
+            </li>
+        </ol>
+
+        {# Wallet receipt #}
+        <template x-if="status === 'done'">
+            <div class="mt-8">
+                <template x-for="r in receipts" :key="r.txid">
+                    <div class="rounded-xl bg-emerald-500/5 p-4 text-left ring-1 ring-emerald-500/20">
+                        <p class="flex items-center gap-2 text-sm font-semibold text-emerald-300">{{ icon('wallet', 'h-4 w-4') }} Receipt sent to your wallet</p>
+                        <p class="mt-1 text-xs text-gray-400">To <span class="font-mono" x-text="short(r.address)"></span>. It'll appear in your Pera Wallet activity.</p>
+                        <a x-show="r.url" :href="r.url" target="_blank" rel="noopener"
+                           class="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-solar-blue no-underline hover:text-solar-cyan">
+                            View on Pera Explorer {{ icon('arrow-right', 'h-4 w-4') }}
+                        </a>
+                    </div>
+                </template>
+                {% if not current_user.wallet_public_key %}
+                <a href="{{ url_for('account_wallet') }}"
+                   class="flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] p-4 text-sm text-gray-300 ring-1 ring-white/10 no-underline hover:text-white">
+                    {{ icon('wallet', 'h-4 w-4') }} Link your Pera Wallet to get on-chain receipts for every trade
+                </a>
+                {% endif %}
+                <p x-show="receiptError" class="mt-3 text-xs text-amber-300">Your purchase went through, but we couldn't send the wallet receipt this time.</p>
+            </div>
+        </template>
+
+        <p x-show="countdown !== null" x-cloak class="mt-8 text-xs text-gray-500">
+            Redirecting to your dashboard in <span class="font-semibold text-gray-300" x-text="countdown"></span>s…
+        </p>
+
+        <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <a href="{{ url_for('home') }}" class="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-solar-blue to-solar-purple px-5 py-2.5 text-sm font-semibold text-white no-underline hover:brightness-110">Go to dashboard</a>
+            <a href="{{ url_for('transactions') }}" class="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold text-gray-300 ring-1 ring-white/10 no-underline hover:bg-white/5 hover:text-white">View transactions</a>
+        </div>
+
+        <p class="mt-6 break-all text-[11px] text-gray-600">Reference: {{ tx_id }}</p>
+    </div>
+</div>
 {% endblock %}

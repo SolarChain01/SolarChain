@@ -1,28 +1,77 @@
 {% extends "account_control.html" %}
+{% from "_icons.html" import icon %}
+{% from "_ui.html" import CARD, stars, avatar, badge %}
+
 {% block settings_area %}
+{% set stored = current_user.units or 0 %}
 
-<script src="static/home_page.js"></script>
-
-<div style="display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden">
-    <div class="settings_content_container">
-        <div class="settings_content_container" style="flex-direction: row" id="profile_info">
-            <img class="profile_picture" style="width: 2em; height: 2em;" src="static/Resources/images/profile.jpg" alt="profile_photo">
-            <div style="margin-left: 0.4em;">
-                <p style="font-size: 0.5em; margin: 0;">{{ current_user.username }}</p>
-                <p style="font-size: 0.2em; width:10rem; margin: 0;">User ID: {{ current_user.id }}</p>
+{# Profile summary #}
+<section class="{{ CARD }} overflow-hidden">
+    <div class="h-20 bg-gradient-to-r from-solar-blue/40 via-solar-purple/40 to-solar-purple/10"></div>
+    <div class="px-6 pb-6">
+        <div class="-mt-10">{{ avatar(current_user.username, 'h-20 w-20 text-3xl ring-4 ring-panel') }}</div>
+        <div class="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+                <p class="truncate text-xl font-bold text-white">{{ current_user.username }}</p>
+                <p class="flex items-center gap-2 text-sm text-gray-400">User #{{ current_user.id }} · {{ stars(current_user.seller_rep or 0, 'text-sm') }}</p>
             </div>
+            <a href="{{ url_for('logout') }}"
+               class="inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-300 ring-1 ring-white/10 no-underline hover:bg-white/5 hover:text-white">
+                {{ icon('logout', 'h-4 w-4') }} Sign out
+            </a>
         </div>
-        <div class="settings_content_container" style="padding: 0; margin: 0; width: 70%;">
-            <h1>Account Info</h1>
-            <hr style="width: 100%;">
-            <form class="text_input_container" action="{{ url_for('update_account') }}" method="POST" style="display: flex; flex-direction: column; ">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" value="{{ current_user.username }}" required>
-                <button type="submit" style="width: max-content;">Save Changes</button>
-            </form>
-        </div>
-        {{ display_messages() }}
     </div>
-</div>
+    <dl class="grid grid-cols-2 border-t border-white/5 sm:grid-cols-3">
+        <div class="px-6 py-4">
+            <dt class="text-xs text-gray-500">Battery</dt>
+            <dd class="m-0 mt-1 text-sm font-semibold text-white tabular-nums">{{ stored }} / {{ BATTERY_CAPACITY }} units</dd>
+        </div>
+        <div class="border-l border-white/5 px-6 py-4">
+            <dt class="text-xs text-gray-500">Seller rating</dt>
+            <dd class="m-0 mt-1 text-sm font-semibold text-white">{{ current_user.seller_rep or 0 }} / 5</dd>
+        </div>
+        <div class="col-span-2 border-t border-white/5 px-6 py-4 sm:col-span-1 sm:border-l sm:border-t-0">
+            <dt class="text-xs text-gray-500">Wallet</dt>
+            <dd class="m-0 mt-1">
+                {% if current_user.wallet_public_key %}{{ badge('good', 'Pera linked', 'wallet') }}{% else %}{{ badge('warn', 'Not linked') }}{% endif %}
+            </dd>
+        </div>
+    </dl>
+</section>
 
+{# Username #}
+<section class="{{ CARD }} p-6" aria-labelledby="username-title">
+    <h2 id="username-title" class="text-base font-semibold text-white">Username</h2>
+    <p class="mt-0.5 text-sm text-gray-400">This is how buyers and sellers see you on the marketplace.</p>
+
+    <form action="{{ url_for('update_account') }}" method="POST" class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start"
+          x-data="{ name: {{ current_user.username|tojson|forceescape }}, original: {{ current_user.username|tojson|forceescape }} }">
+        <div class="flex-1">
+            <label for="username" class="sr-only">Username</label>
+            <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-500">{{ icon('user') }}</span>
+                <input type="text" id="username" name="username" x-model="name" required minlength="2" maxlength="20" autocomplete="username"
+                       class="block h-12 w-full rounded-lg border border-white/10 bg-field pl-11 pr-4 text-[15px] text-white outline-none transition hover:border-white/20 focus:border-solar-purple focus:ring-4 focus:ring-solar-purple/25">
+            </div>
+            <p class="mt-1.5 text-xs text-gray-500">2–20 characters. Must be unique.</p>
+        </div>
+        <button type="submit" :disabled="name.trim() === original || name.trim().length < 2"
+                class="h-12 rounded-lg bg-gradient-to-r from-solar-blue to-solar-purple px-6 text-sm font-semibold text-white cursor-pointer transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
+            Save changes
+        </button>
+    </form>
+</section>
+
+{# Wallet nudge #}
+{% if not current_user.wallet_public_key %}
+<a href="{{ url_for('account_wallet') }}"
+   class="{{ CARD }} flex items-center gap-4 p-5 no-underline transition hover:ring-solar-purple/40">
+    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-solar-purple/20 text-violet-300 ring-1 ring-solar-purple/40">{{ icon('wallet', 'h-5 w-5') }}</span>
+    <div class="min-w-0 flex-1">
+        <p class="text-sm font-semibold text-white">Link your Pera Wallet</p>
+        <p class="text-sm text-gray-400">See every trade you make as an on-chain receipt in your wallet.</p>
+    </div>
+    <span class="text-gray-400">{{ icon('arrow-right', 'h-5 w-5') }}</span>
+</a>
+{% endif %}
 {% endblock settings_area %}

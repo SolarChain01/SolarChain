@@ -1,28 +1,145 @@
 {% extends "account_control.html" %}
+{% from "_icons.html" import icon %}
+{% from "_ui.html" import CARD, badge %}
+
 {% block settings_area %}
 
-<script src="static/home_page.js"></script>
-
-<div style="display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden">
-    <div class="settings_content_container">
-        <div class="settings_content_container" style="flex-direction: row" id="profile_info">
-            <img class="profile_picture" style="width: 2em; height: 2em;" src="static/Resources/images/profile.jpg" alt="profile_photo">
-            <div style="margin-left: 0.4em;">
-                <p style="font-size: 0.5em; margin: 0;">{{ current_user.username }}</p>
-                <p style="font-size: 0.2em; width:10rem; margin: 0;">User ID: {{ current_user.id }}</p>
+{# ---------- Linked wallet ---------- #}
+{% if wallet %}
+<section class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1b2a4a] via-[#2a2160] to-[#1e1f22] p-6 ring-1 ring-solar-purple/30 shadow-xl shadow-black/30"
+         x-data="{ copied: false }" aria-labelledby="linked-title">
+    <div class="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-solar-purple/20 blur-3xl"></div>
+    <div class="relative flex flex-wrap items-start justify-between gap-3">
+        <div class="flex items-center gap-3">
+            <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/20">{{ icon('wallet', 'h-5 w-5') }}</span>
+            <div>
+                <h2 id="linked-title" class="text-base font-semibold text-white">Pera Wallet linked</h2>
+                <p class="text-sm text-white/60">Trade receipts are sent to this address</p>
             </div>
         </div>
-        <div class="settings_content_container" style="padding: 0; margin: 0; width: 70%;">
-            <h1>Wallet Info</h1>
-            <hr style="width: 100%;">
-            <form class="text_input_container" action="{{ url_for('update_wallet') }}" method="POST" style="display: flex; flex-direction: column; ">
-                <label for="wallet_key">Wallet Key</label>
-                <input type="text" id="wallet_key" name="wallet_key" value="{{ current_user.wallet_public_key if current_user.wallet_public_key else '' }}" required>
-                <button type="submit" style="width: max-content;">Save Changes</button>
+        <div class="flex items-center gap-2">
+            {{ badge('info', network, 'cube') }}
+            {{ badge('good', 'Active') }}
+        </div>
+    </div>
+
+    <div class="relative mt-6">
+        <p class="text-xs font-medium uppercase tracking-wider text-white/50">Address</p>
+        <div class="mt-1.5 flex items-start gap-2">
+            <p class="m-0 min-w-0 flex-1 break-all font-mono text-sm leading-relaxed text-white">{{ wallet.address }}</p>
+            <button type="button" title="Copy address"
+                    @click="navigator.clipboard.writeText({{ wallet.address|tojson|forceescape }}); copied = true; setTimeout(() => copied = false, 1800)"
+                    class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-white/10 px-3 text-xs font-semibold text-white cursor-pointer ring-1 ring-white/15 hover:bg-white/15">
+                <span x-text="copied ? 'Copied ✓' : 'Copy'">Copy</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="relative mt-6 flex flex-wrap items-end justify-between gap-4 border-t border-white/10 pt-5">
+        <div>
+            <p class="text-xs font-medium uppercase tracking-wider text-white/50">Balance</p>
+            <p class="mt-1 text-2xl font-bold text-white tabular-nums">
+                {% if wallet.balance is not none %}{{ '{:,.4f}'.format(wallet.balance) }} <span class="text-sm font-medium text-white/60">ALGO</span>
+                {% else %}<span class="text-base font-medium text-white/60">Unavailable right now</span>{% endif %}
+            </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            {% if wallet.explorer_url %}
+            <a href="{{ wallet.explorer_url }}" target="_blank" rel="noopener"
+               class="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-ink no-underline hover:bg-white/90">
+                View on Pera Explorer {{ icon('arrow-out', 'h-4 w-4') }}
+            </a>
+            {% endif %}
+            <form action="{{ url_for('update_wallet') }}" method="POST" class="m-0"
+                  x-data @submit="if (!confirm('Unlink this wallet? You will stop receiving on-chain trade receipts.')) $event.preventDefault()">
+                <input type="hidden" name="action" value="unlink">
+                <button type="submit" class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-medium text-white/70 cursor-pointer ring-1 ring-white/15 hover:bg-red-500/10 hover:text-red-300 hover:ring-red-500/30">
+                    Unlink
+                </button>
             </form>
         </div>
-        {{ display_messages() }}
     </div>
-</div>
+</section>
+{% endif %}
 
+{# ---------- Link / change wallet ---------- #}
+<section class="{{ CARD }} p-6" aria-labelledby="link-title"
+         x-data="{
+            addr: '',
+            get v() { return this.addr.trim() },
+            get isPhrase() { return this.v.split(/\s+/).length >= 12 },
+            get looksValid() { return /^[A-Z2-7]{58}$/.test(this.v) },
+         }">
+    <div class="flex items-center gap-3">
+        <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-solar-purple/20 text-violet-300 ring-1 ring-solar-purple/40">{{ icon('wallet', 'h-5 w-5') }}</span>
+        <div>
+            <h2 id="link-title" class="text-base font-semibold text-white">{{ 'Change linked wallet' if wallet else 'Link your Pera Wallet' }}</h2>
+            <p class="text-sm text-gray-400">Paste your wallet’s <strong class="text-gray-200">public address</strong>. That's all we need.</p>
+        </div>
+    </div>
+
+    <form action="{{ url_for('update_wallet') }}" method="POST" class="mt-5 space-y-3" autocomplete="off">
+        <input type="hidden" name="action" value="link">
+        <label for="wallet_key" class="block text-sm font-medium text-gray-300">Algorand address</label>
+        <textarea id="wallet_key" name="wallet_key" rows="2" x-model="addr" required spellcheck="false" autocapitalize="characters"
+                  placeholder="Paste your 58-character Pera Wallet address"
+                  class="block w-full resize-none rounded-lg border bg-field px-4 py-3 font-mono text-sm text-white placeholder-gray-600 outline-none transition focus:ring-4"
+                  :class="isPhrase ? 'border-red-500/70 focus:ring-red-500/20' : (v && looksValid ? 'border-emerald-500/60 focus:ring-emerald-500/20' : 'border-white/10 focus:border-solar-purple focus:ring-solar-purple/25')"></textarea>
+
+        {# Live feedback #}
+        <p x-show="isPhrase" x-cloak class="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2.5 text-sm text-red-300 ring-1 ring-red-500/30">
+            {{ icon('warning', 'h-4 w-4 mt-0.5 shrink-0') }}
+            <span>This looks like a <strong>recovery passphrase</strong>. Never share it with anyone, including SolarChain. Clear it and paste your public address instead.</span>
+        </p>
+        <p x-show="!isPhrase && v && !looksValid" x-cloak class="flex items-center gap-1.5 text-xs text-amber-300">
+            {{ icon('info', 'h-3.5 w-3.5') }} <span>An Algorand address is 58 characters: capital letters and digits 2–7 (<span x-text="v.length"></span>/58).</span>
+        </p>
+        <p x-show="looksValid" x-cloak class="flex items-center gap-1.5 text-xs text-emerald-300">
+            {{ icon('check-circle', 'h-3.5 w-3.5') }} Looks like a valid address
+        </p>
+
+        <button type="submit" :disabled="!looksValid"
+                class="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-solar-blue to-solar-purple text-sm font-semibold text-white cursor-pointer transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:px-6">
+            {{ icon('wallet', 'h-4 w-4') }} {{ 'Update wallet' if wallet else 'Link wallet' }}
+        </button>
+    </form>
+</section>
+
+{# ---------- How-to ---------- #}
+<div class="grid gap-6 lg:grid-cols-2">
+    <section class="{{ CARD }} p-6" aria-labelledby="howto-title">
+        <h2 id="howto-title" class="text-base font-semibold text-white">Find your address in Pera Wallet</h2>
+        <ol class="mt-4 list-none space-y-4">
+            {% for title, text in [
+                ('Switch Pera to ' ~ network, 'In the Pera app open Settings → Developer Settings → Node Settings and choose ' ~ network ~ '. SolarChain receipts live on ' ~ network ~ ', so they only show in this mode.'),
+                ('Open your account', 'Go to the Accounts tab and tap the account you want to use.'),
+                ('Copy the address', 'Tap the address (or the copy icon) under the account name. It’s 58 characters long.'),
+                ('Paste it above', 'Paste the address into the box above and press Link wallet.'),
+            ] %}
+            <li class="flex gap-3">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-solar-blue/15 text-xs font-bold text-solar-blue ring-1 ring-solar-blue/30">{{ loop.index }}</span>
+                <div>
+                    <p class="text-sm font-semibold text-white">{{ title }}</p>
+                    <p class="mt-0.5 text-sm text-gray-400">{{ text }}</p>
+                </div>
+            </li>
+            {% endfor %}
+        </ol>
+    </section>
+
+    <section class="space-y-6">
+        <div class="{{ CARD }} p-6">
+            <h2 class="text-base font-semibold text-white">What you’ll see in Pera</h2>
+            <p class="mt-2 text-sm text-gray-400">After every trade, SolarChain sends a <strong class="text-gray-200">0 ALGO receipt transaction</strong> to your wallet with a note describing it:</p>
+            <div class="mt-3 rounded-lg bg-field px-4 py-3 font-mono text-xs text-gray-300 ring-1 ring-white/10">
+                SolarChain: Bought 5 energy unit(s) from priya for Rs 22.50
+            </div>
+            <p class="mt-3 text-sm text-gray-400">It’s free for you: SolarChain pays the network fee, and you don’t need to approve anything.</p>
+        </div>
+        <div class="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-200">
+            {{ icon('warning', 'h-5 w-5 shrink-0 text-amber-300') }}
+            <p class="m-0"><strong class="text-amber-100">Keep your passphrase private.</strong> SolarChain only ever needs your public address. Never enter your 25-word recovery passphrase on any website.</p>
+        </div>
+    </section>
+</div>
 {% endblock settings_area %}

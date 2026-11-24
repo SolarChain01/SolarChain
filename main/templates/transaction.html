@@ -1,56 +1,126 @@
 {% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% from "_ui.html" import CARD, money, units_label, page_header, stat_tile, empty_state, alerts %}
+
 {% block content %}
+{% set bought = history|selectattr('type', 'equalto', 'CREDIT')|list %}
+{% set sold = history|selectattr('type', 'equalto', 'DEBIT')|list %}
+{% set spent = bought|map(attribute='row.price')|sum %}
+{% set earned = sold|map(attribute='row.price')|sum %}
 
-<div class="content">
-    <div class="vertical_div" style="gap: 3em;">
-        <div class="horizontal_div" style="gap: 2em;">
-            <div class="page" style="width: 44vw; height: 50vh;">
-                <p style="text-align: center;">Pending Transactions</p>
+<div class="tw-scope font-sans antialiased text-gray-100 px-4 sm:px-6 lg:px-10 py-8 lg:py-10">
+<div class="mx-auto max-w-7xl space-y-6" x-data="{ tab: 'all' }">
 
-                <p style="text-align: center; color: grey;">Any transaction in queue will be shown here.</p>
-            </div>
-            <div class="page" style="width: 44vw; height: 50vh;">
-                <p style="text-align: center;">Transactions Under Process</p>
+    {% call page_header('Transactions', 'Your trading history',
+                        'Every unit you’ve bought or sold, recorded on the Algorand blockchain.') %}
+        <a href="{{ url_for('buyer_page') }}"
+           class="inline-flex items-center gap-2 rounded-lg bg-solar-blue px-4 py-2.5 text-sm font-semibold text-white no-underline shadow-lg shadow-solar-blue/20 hover:brightness-110 transition">
+            {{ icon('cart', 'h-4 w-4') }} Buy energy
+        </a>
+    {% endcall %}
 
-                <p style="text-align: center; color: grey;">Any transaction being processed will be shown here.<br>Transactions might take upto a few minutes to process.</p>
-            </div>
-        </div>
+    {{ alerts() }}
 
-        <div class="page" style="width: 90vw;">
-            <p style="text-align: center;">Past Transactions</p>
-            <!--  Have a Table View thing here  -->
-            <table class="bordered">
-                <thead>
-                <tr>
-                    <th scope="col">ID</th>
-                    <th scope="col">Type</th>
-                    <th scope="col">Seller ID</th>
-                    <th scope="col">Seller Name</th>
-                    <th scope="col">Buyer ID</th>
-                    <th scope="col">Units</th>
-                    <th scope="col">Total Price</th>
-                    <th scope="col">Date</th>
-                </tr>
-                </thead>
+    <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" aria-label="Totals">
+        {{ stat_tile('Energy bought', units_label(bought|map(attribute='row.units')|sum), bought|length ~ ' purchase' ~ ('' if bought|length == 1 else 's'), 'arrow-in', 'bg-solar-blue/15 text-solar-blue ring-solar-blue/30') }}
+        {{ stat_tile('Energy sold', units_label(sold|map(attribute='row.units')|sum), sold|length ~ ' sale' ~ ('' if sold|length == 1 else 's'), 'arrow-out', 'bg-solar-purple/20 text-violet-300 ring-solar-purple/40') }}
+        {{ stat_tile('Total spent', money(spent), 'Paid to sellers', 'cart', 'bg-amber-400/10 text-amber-300 ring-amber-400/30') }}
+        {{ stat_tile('Total earned', money(earned), 'Net ' ~ money(earned - spent), 'trend', 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/30') }}
+    </section>
 
-                <tbody>
-                {% for items in history %}
-                <tr>
-                    <td>{{items.row.id}}</td>
-                    <td>{{items.type}}</td>
-                    <td>{{items.row.seller_id}}</td>
-                    <td>{{items.row.seller_username}}</td>
-                    <td>{{items.row.buyer_id}}</td>
-                    <td>{{items.row.units}}</td>
-                    <td>{{items.row.price}}</td>
-                    <td>{{ items.row.date | formatdatetime }}</td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-
-        </div>
+    <div class="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-400">
+        {{ icon('clock', 'h-5 w-5 shrink-0 text-gray-500') }}
+        <span>Purchases in progress appear here once they’re confirmed on the blockchain. This usually takes a few seconds, but can take up to a few minutes.</span>
     </div>
-</div>
 
+    <section class="{{ CARD }} overflow-hidden" aria-labelledby="history-title">
+        <div class="flex flex-col gap-4 border-b border-white/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <h2 id="history-title" class="text-base font-semibold text-white">All trades</h2>
+            {# Filter tabs #}
+            <div class="inline-flex w-full rounded-lg bg-field p-1 ring-1 ring-white/10 sm:w-auto" role="tablist">
+                {% for key, label, n in [('all', 'All', history|length), ('buy', 'Bought', bought|length), ('sell', 'Sold', sold|length)] %}
+                <button type="button" role="tab" @click="tab = '{{ key }}'" :aria-selected="tab === '{{ key }}'"
+                        class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium cursor-pointer transition sm:flex-none"
+                        :class="tab === '{{ key }}' ? 'bg-panel text-white shadow ring-1 ring-white/10' : 'text-gray-400 hover:text-white'">
+                    {{ label }} <span class="text-xs text-gray-500 tabular-nums">{{ n }}</span>
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% if history %}
+            {# ---- Desktop table ---- #}
+            <div class="hidden overflow-x-auto md:block">
+                <table class="w-full border-collapse text-sm">
+                    <thead>
+                    <tr class="text-left text-xs uppercase tracking-wider text-gray-500">
+                        <th class="bg-transparent px-6 py-3 font-semibold">Trade</th>
+                        <th class="bg-transparent px-4 py-3 font-semibold">With</th>
+                        <th class="bg-transparent px-4 py-3 text-right font-semibold">Units</th>
+                        <th class="bg-transparent px-4 py-3 text-right font-semibold">Price / unit</th>
+                        <th class="bg-transparent px-4 py-3 text-right font-semibold">Total</th>
+                        <th class="bg-transparent px-4 py-3 font-semibold">Date</th>
+                        <th class="bg-transparent px-6 py-3 text-right font-semibold">ID</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in history %}
+                    {% set row = item.row %}
+                    {% set is_buy = item.type == 'CREDIT' %}
+                    <tr x-show="tab === 'all' || tab === '{{ 'buy' if is_buy else 'sell' }}'" class="border-t border-white/5 transition hover:bg-white/[0.02]">
+                        <td class="px-6 py-3.5">
+                            <span class="inline-flex items-center gap-2.5 font-medium text-white">
+                                <span class="flex h-8 w-8 items-center justify-center rounded-lg ring-1 {{ 'bg-solar-blue/15 text-solar-blue ring-solar-blue/30' if is_buy else 'bg-solar-purple/20 text-violet-300 ring-solar-purple/40' }}">
+                                    {{ icon('arrow-in' if is_buy else 'arrow-out', 'h-4 w-4') }}
+                                </span>
+                                {{ 'Bought' if is_buy else 'Sold' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3.5 text-gray-300">{{ row.seller_username if is_buy else 'User #' ~ row.buyer_id }}</td>
+                        <td class="px-4 py-3.5 text-right text-white tabular-nums">{{ row.units }}</td>
+                        <td class="px-4 py-3.5 text-right text-gray-400 tabular-nums">{{ money(row.price / row.units) if row.units else '—' }}</td>
+                        <td class="px-4 py-3.5 text-right font-semibold text-white tabular-nums">{{ money(row.price) }}</td>
+                        <td class="px-4 py-3.5 text-gray-400 whitespace-nowrap">{{ row.date | formatdatetime('%d %b %Y, %H:%M') }}</td>
+                        <td class="px-6 py-3.5 text-right text-gray-500 tabular-nums">#{{ row.id }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {# ---- Mobile cards ---- #}
+            <ul class="list-none divide-y divide-white/5 md:hidden">
+                {% for item in history %}
+                {% set row = item.row %}
+                {% set is_buy = item.type == 'CREDIT' %}
+                <li x-show="tab === 'all' || tab === '{{ 'buy' if is_buy else 'sell' }}'" class="flex items-center gap-3 px-4 py-4">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1 {{ 'bg-solar-blue/15 text-solar-blue ring-solar-blue/30' if is_buy else 'bg-solar-purple/20 text-violet-300 ring-solar-purple/40' }}">
+                        {{ icon('arrow-in' if is_buy else 'arrow-out', 'h-4 w-4') }}
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-medium text-white">
+                            {% if is_buy %}Bought {{ units_label(row.units) }} from {{ row.seller_username }}{% else %}Sold {{ units_label(row.units) }} to user #{{ row.buyer_id }}{% endif %}
+                        </p>
+                        <p class="text-xs text-gray-500">{{ row.date | formatdatetime('%d %b %Y, %H:%M') }} · #{{ row.id }}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-semibold text-white tabular-nums">{{ money(row.price) }}</p>
+                        <p class="text-xs text-gray-500">{{ 'paid' if is_buy else 'received' }}</p>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+
+            {# Empty filter result #}
+            <div x-show="(tab === 'buy' && {{ bought|length }} === 0) || (tab === 'sell' && {{ sold|length }} === 0)" x-cloak>
+                <p class="px-6 py-10 text-center text-sm text-gray-400"
+                   x-text="tab === 'buy' ? 'You haven’t bought any energy yet.' : 'You haven’t sold any energy yet.'"></p>
+            </div>
+        {% else %}
+            {{ empty_state('swap', 'No trades yet', 'Your purchases and sales will show up here.', url_for('buyer_page'), 'Browse the marketplace') }}
+        {% endif %}
+    </section>
+
+</div>
+</div>
 {% endblock content %}

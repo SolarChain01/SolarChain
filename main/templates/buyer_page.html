@@ -1,45 +1,189 @@
 {% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% from "_ui.html" import CARD, money, units_label, page_header, stat_tile, alerts %}
+
 {% block content %}
+{% set capacity = BATTERY_CAPACITY %}
+{% set free_space = [capacity - (current_user.units or 0), 0]|max %}
+{% set available = sell_orders|selectattr('status', 'equalto', 0)|list %}
+{% set market_units = available|map(attribute='order.units')|sum %}
+{% set best_price = (available|map(attribute='order.price')|min) if available else None %}
 
-<div class="content">
-    <div class="page" style="width: 95vw;">
-        <h1 class="heading">Available Sellers</h1>
+{# Offer data for the Alpine list (search / sort / filter happen client-side) #}
+{% set offers = [] %}
+{% for item in sell_orders %}
+    {% set _ = offers.append({
+        'id': item.order.id,
+        'seller': item.seller.username,
+        'rep': item.seller.seller_rep or 0,
+        'units': item.order.units,
+        'price': item.order.price,
+        'available': item.status == 0,
+        'url': url_for('checkout_page', order_id=item.order.id),
+    }) %}
+{% endfor %}
 
-        <!-- Table for listing existing sell orders -->
-        <table class="bordered">
-            <thead>
-            <tr>
-                <th scope="col">Order ID</th>
-                <th scope="col">Seller Name</th>
-                <th scope="col">Seller Rating</th>
-                <th scope="col">Units Available</th>
-                <th scope="col">Price Per Unit</th>
-                <th scope="col">Total Price</th>
-                <th scope="col">Status</th>
-                <th scope="col"></th>
-            </tr>
-            </thead>
+<script>
+    window.MARKET_OFFERS = {{ offers|tojson }};
+    function market() {
+        return {
+            offers: window.MARKET_OFFERS,
+            q: '',
+            sort: 'price',
+            onlyAvailable: true,
+            get list() {
+                const q = this.q.trim().toLowerCase();
+                const key = {
+                    price: (a, b) => a.price - b.price,
+                    units: (a, b) => b.units - a.units,
+                    rating: (a, b) => b.rep - a.rep || a.price - b.price,
+                }[this.sort];
+                return this.offers
+                    .filter(o => (!this.onlyAvailable || o.available) && (!q || o.seller.toLowerCase().includes(q)))
+                    .sort(key);
+            },
+            money(n) {
+                return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            },
+        };
+    }
+</script>
 
-            <tbody>
-    {% for item in sell_orders %}
-    <tr>
-        <td>{{ item.order.id }}</td>
-        <td>{{ item.seller.username }}</td>
-        <td class="rep" data-rep="{{ item.seller.seller_rep }}"></td>
-        <td>{{ item.order.units }}</td>
-        <td>Rs. {{ item.order.price }}</td>
-        <td>{{ item.order.units * item.order.price }}</td>
-        <td>
-            <div class="status"><p>{{ item.status }}</p></div>
-        </td>
-        <td>
-            <a class="button" href="{{ url_for('checkout_page', order_id=item.order.id) }}">Buy</a>
-        </td>
-    </tr>
-    {% endfor %}
-            </tbody>
-        </table>
+<div class="tw-scope font-sans antialiased text-gray-100 px-4 sm:px-6 lg:px-10 py-8 lg:py-10">
+<div class="mx-auto max-w-7xl space-y-6" x-data="market()">
+
+    {% call page_header('Marketplace', 'Buy energy from your neighbours',
+                        'Pick an offer, choose how many units you need, and the energy is delivered to your home battery.') %}
+        <a href="{{ url_for('seller_page') }}"
+           class="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-violet-300 ring-1 ring-solar-purple/40 no-underline hover:bg-solar-purple/10 transition">
+            {{ icon('tag', 'h-4 w-4') }} Sell your surplus instead
+        </a>
+    {% endcall %}
+
+    {{ alerts() }}
+
+    {% if free_space == 0 %}
+    <div class="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        {{ icon('warning', 'h-5 w-5 shrink-0 text-amber-300') }}
+        <span><strong class="text-amber-100">Your battery is full.</strong> You can browse offers, but you’ll need free space before a purchase can go through.</span>
     </div>
-</div>
+    {% endif %}
 
+    {# Summary #}
+    <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" aria-label="Market summary">
+        {{ stat_tile('Live offers', available|length, 'Sellers ready to deliver', 'users', 'bg-sky-400/15 text-sky-300 ring-sky-400/30') }}
+        {{ stat_tile('Units on market', market_units, 'Across all live offers', 'bolt', 'bg-amber-400/10 text-amber-300 ring-amber-400/30') }}
+        {{ stat_tile('Lowest price', (money(best_price) ~ '/unit') if best_price is not none else '—', 'Best deal right now', 'trend', 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/30') }}
+        {{ stat_tile('Your free space', units_label(free_space), 'Room left in your battery', 'battery', 'bg-solar-blue/15 text-solar-blue ring-solar-blue/30') }}
+    </section>
+
+    {# Controls #}
+    <section class="{{ CARD }} flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+        <label class="relative flex-1">
+            <span class="sr-only">Search sellers</span>
+            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-500">{{ icon('user', 'h-4 w-4') }}</span>
+            <input type="search" x-model="q" placeholder="Search by seller name"
+                   class="block h-11 w-full rounded-lg border border-white/10 bg-field pl-10 pr-4 text-sm text-white placeholder-gray-500 outline-none focus:border-solar-purple focus:ring-4 focus:ring-solar-purple/25">
+        </label>
+        <div class="flex items-center gap-3">
+            <label class="flex flex-1 items-center gap-2 sm:flex-none">
+                <span class="text-sm text-gray-400 whitespace-nowrap">Sort by</span>
+                <select x-model="sort"
+                        class="h-11 flex-1 cursor-pointer rounded-lg border border-white/10 bg-field px-3 text-sm text-white outline-none focus:border-solar-purple focus:ring-4 focus:ring-solar-purple/25">
+                    <option value="price">Lowest price</option>
+                    <option value="units">Most units</option>
+                    <option value="rating">Best rated</option>
+                </select>
+            </label>
+            <label class="flex h-11 cursor-pointer select-none items-center gap-2 rounded-lg px-3 text-sm text-gray-300 ring-1 ring-white/10 whitespace-nowrap">
+                <input type="checkbox" x-model="onlyAvailable" class="m-0 h-4 w-4 cursor-pointer accent-solar-purple">
+                Available only
+            </label>
+        </div>
+    </section>
+
+    {# Offers #}
+    <section aria-label="Offers">
+        <p class="mb-3 text-sm text-gray-400" x-cloak>
+            Showing <span class="font-semibold text-white" x-text="list.length"></span>
+            <span x-text="list.length === 1 ? 'offer' : 'offers'"></span>
+        </p>
+
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <template x-for="o in list" :key="o.id">
+                <article class="{{ CARD }} flex flex-col p-5 transition hover:ring-white/20" :class="!o.available && 'opacity-60'">
+                    <div class="flex items-start gap-3">
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-solar-blue to-solar-purple text-base font-bold uppercase text-white ring-2 ring-white/10"
+                              x-text="o.seller[0]"></span>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-base font-semibold text-white" x-text="o.seller"></p>
+                            <p class="flex items-center gap-2 text-xs text-gray-400">
+                                <span class="inline-flex gap-px" :aria-label="o.rep + ' out of 5 stars'">
+                                    <template x-for="i in 5"><span :class="i <= o.rep ? 'text-amber-400' : 'text-white/15'">★</span></template>
+                                </span>
+                                <span>Order #<span x-text="o.id"></span></span>
+                            </p>
+                        </div>
+                        <span x-show="o.available"
+                              class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
+                            {{ icon('check-circle', 'h-3.5 w-3.5') }} Available
+                        </span>
+                        <span x-show="!o.available"
+                              class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 ring-1 ring-red-500/30">
+                            {{ icon('alert-circle', 'h-3.5 w-3.5') }} Unavailable
+                        </span>
+                    </div>
+
+                    <div class="mt-5 flex items-end justify-between gap-4">
+                        <div>
+                            <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Price</p>
+                            <p class="text-2xl font-bold tracking-tight text-white tabular-nums">
+                                <span x-text="money(o.price)"></span><span class="text-sm font-medium text-gray-500">/unit</span>
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Units</p>
+                            <p class="text-2xl font-bold tracking-tight text-white tabular-nums" x-text="o.units"></p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 flex items-center justify-between border-t border-white/5 pt-4 text-sm">
+                        <span class="text-gray-400">Whole offer</span>
+                        <span class="font-semibold text-white tabular-nums" x-text="money(o.price * o.units)"></span>
+                    </div>
+
+                    <a x-show="o.available" :href="o.url"
+                       class="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-solar-blue px-4 py-2.5 text-sm font-semibold text-white no-underline shadow-lg shadow-solar-blue/20 transition hover:-translate-y-0.5 hover:brightness-110">
+                        Buy energy {{ icon('arrow-right', 'h-4 w-4') }}
+                    </a>
+                    <p x-show="!o.available" class="mt-4 rounded-lg bg-white/5 px-4 py-2.5 text-center text-sm text-gray-400">
+                        Seller doesn’t have enough units right now
+                    </p>
+                </article>
+            </template>
+        </div>
+
+        {# Empty states #}
+        <div x-show="list.length === 0" x-cloak class="{{ CARD }}">
+            <div class="flex flex-col items-center justify-center px-6 py-14 text-center">
+                <span class="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-gray-400">{{ icon('users', 'h-6 w-6') }}</span>
+                <template x-if="offers.length === 0">
+                    <div>
+                        <p class="mt-3 text-sm font-semibold text-white">No offers on the market yet</p>
+                        <p class="mt-1 text-sm text-gray-400">Check back soon, or list your own surplus energy.</p>
+                    </div>
+                </template>
+                <template x-if="offers.length > 0">
+                    <div>
+                        <p class="mt-3 text-sm font-semibold text-white">No offers match your filters</p>
+                        <button type="button" @click="q = ''; onlyAvailable = false"
+                                class="mt-2 cursor-pointer text-sm font-semibold text-solar-blue hover:text-solar-cyan">Clear filters</button>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </section>
+
+</div>
+</div>
 {% endblock content %}

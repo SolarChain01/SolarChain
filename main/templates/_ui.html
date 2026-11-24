@@ -1,0 +1,99 @@
+{# Shared UI building blocks (Tailwind). Import what you need:
+   {% from "_ui.html" import CARD, money, units_label, stars, avatar, page_header, stat_tile, empty_state, alerts, badge %} #}
+{% from "_icons.html" import icon %}
+
+{% set CARD = 'rounded-2xl bg-panel ring-1 ring-white/10 shadow-xl shadow-black/20' %}
+
+{# ₹ amount; negative values get a proper minus sign #}
+{% macro money(x) -%}
+{{ '−' if x < 0 else '' }}₹{{ '{:,.2f}'.format(x|abs) }}
+{%- endmacro %}
+
+{% macro units_label(n) -%}
+{{ n }} unit{{ '' if n == 1 else 's' }}
+{%- endmacro %}
+
+{% macro stars(n, cls='text-sm') -%}
+<span class="inline-flex gap-px {{ cls }}" aria-label="{{ n }} out of 5 stars" title="{{ n }} / 5">
+    {%- for i in range(5) -%}
+    <span class="{{ 'text-amber-400' if i < n else 'text-white/15' }}">★</span>
+    {%- endfor -%}
+</span>
+{%- endmacro %}
+
+{% macro avatar(name, cls='h-10 w-10 text-sm') -%}
+<span class="flex {{ cls }} shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-solar-blue to-solar-purple font-bold uppercase text-white ring-2 ring-white/10">
+    {{ (name or '?')[0] }}
+</span>
+{%- endmacro %}
+
+{# Status pill: always icon + label, never colour alone. kind: good | warn | bad | info | neutral #}
+{% macro badge(kind, label, ic=None) -%}
+{% set tones = {
+    'good': ('bg-emerald-500/10 text-emerald-300 ring-emerald-500/30', 'check-circle'),
+    'warn': ('bg-amber-500/10 text-amber-300 ring-amber-500/30', 'warning'),
+    'bad': ('bg-red-500/10 text-red-300 ring-red-500/30', 'alert-circle'),
+    'info': ('bg-solar-blue/10 text-sky-300 ring-solar-blue/30', 'info'),
+    'neutral': ('bg-white/5 text-gray-300 ring-white/10', 'clock'),
+} %}
+{% set tone, default_icon = tones[kind] %}
+<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1 {{ tone }}">
+    {{ icon(ic or default_icon, 'h-3.5 w-3.5') }} {{ label }}
+</span>
+{%- endmacro %}
+
+{# Page title row; optional right-side actions via {% call %} #}
+{% macro page_header(eyebrow, title, sub=None) -%}
+<header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between motion-safe:animate-fade-in-up">
+    <div class="min-w-0">
+        <p class="text-sm font-medium text-solar-blue">{{ eyebrow }}</p>
+        <h1 class="mt-1 text-3xl sm:text-4xl font-extrabold tracking-tight text-white">{{ title }}</h1>
+        {% if sub %}<p class="mt-1.5 max-w-2xl text-sm text-gray-400">{{ sub }}</p>{% endif %}
+    </div>
+    {% if caller is defined %}<div class="flex flex-wrap items-center gap-3">{{ caller() }}</div>{% endif %}
+</header>
+{%- endmacro %}
+
+{# chip: Tailwind classes for the icon chip (identity colour) #}
+{% macro stat_tile(label, value, sub, ic, chip) -%}
+<div class="{{ CARD }} p-4 sm:p-5">
+    <div class="flex items-center justify-between gap-2">
+        <p class="text-xs sm:text-sm font-medium text-gray-400">{{ label }}</p>
+        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1 {{ chip }}">{{ icon(ic, 'h-4 w-4') }}</span>
+    </div>
+    <p class="mt-2 sm:mt-3 text-xl sm:text-2xl font-bold tracking-tight text-white tabular-nums">{{ value }}</p>
+    {% if sub %}<p class="mt-1 text-xs text-gray-500">{{ sub }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro empty_state(ic, title, text, href=None, cta=None) -%}
+<div class="flex flex-col items-center justify-center px-6 py-12 text-center">
+    <span class="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-gray-400">{{ icon(ic, 'h-6 w-6') }}</span>
+    <p class="mt-3 text-sm font-semibold text-white">{{ title }}</p>
+    <p class="mt-1 text-sm text-gray-400">{{ text }}</p>
+    {% if href %}<a href="{{ href }}" class="mt-4 text-sm font-semibold text-solar-blue no-underline hover:text-solar-cyan">{{ cta }} →</a>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Flash messages as alert boxes #}
+{% macro alerts(cls="") -%}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="space-y-3 {{ cls }}" role="status">
+    {% for category, message in messages %}
+        {% if category == 'success' %}
+            {% set tone, ic = 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', 'check-circle' %}
+        {% elif category in ('danger', 'error') %}
+            {% set tone, ic = 'border-red-500/30 bg-red-500/10 text-red-300', 'alert-circle' %}
+        {% else %}
+            {% set tone, ic = 'border-solar-blue/30 bg-solar-blue/10 text-sky-300', 'info' %}
+        {% endif %}
+        <div class="flex items-start gap-3 rounded-lg border px-4 py-3 text-sm {{ tone }}">
+            {{ icon(ic, 'h-5 w-5 shrink-0') }}
+            <span>{{ message }}</span>
+        </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+{%- endmacro %}
