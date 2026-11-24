@@ -2,7 +2,6 @@
 .vscode/**
 .venv/
 .vercel/
-public/
 __pycache__/
 *.py[cod]
 .env

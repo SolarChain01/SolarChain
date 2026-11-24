@@ -159,3 +159,35 @@ assert client.get("/login").status_code == 200
     result = subprocess.run([sys.executable, "-B", "-c", code], env=environment,
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_login_assets_are_available_from_public_directory(website):
+    """Verify the login page's local assets are ready for CDN and local serving."""
+    from html.parser import HTMLParser
+    from pathlib import Path
+
+    class AssetParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.urls = set()
+
+        def handle_starttag(self, tag, attrs):
+            for name, value in attrs:
+                if name in ("src", "href") and value and value.startswith("/static/"):
+                    self.urls.add(value)
+
+    client = website.app.test_client()
+    parser = AssetParser()
+    parser.feed(client.get("/login").get_data(as_text=True))
+    assert "/static/style.css" in parser.urls
+    assert "/static/Resources/images/solar1.jpg" in parser.urls
+    public = Path(__file__).resolve().parents[1] / "public"
+    for url in parser.urls:
+        asset = public / url.lstrip("/")
+        assert asset.is_file(), f"Missing CDN asset: {url}"
+        response = client.get(url)
+        assert response.status_code == 200, url
+        assert response.data == asset.read_bytes(), url
+        assert response.mimetype != "text/html", url
+    assert client.get("/static/style.css").mimetype == "text/css"
+    assert client.get("/static/Resources/images/solar1.jpg").mimetype == "image/jpeg"

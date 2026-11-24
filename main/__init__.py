@@ -1,6 +1,7 @@
 """Initialize the website for local development or Vercel."""
 import os
 import secrets
+from pathlib import Path
 
 from algosdk.v2client.algod import AlgodClient
 from flask import Flask
@@ -11,7 +12,9 @@ from sqlalchemy.pool import NullPool
 
 from constants import ALGOD_TOKEN, ALGOD_SERVER_ADDRESS
 
-app = Flask(__name__)
+# Vercel serves this directory from its CDN; Flask serves it locally.
+static_directory = Path(__file__).resolve().parent.parent / "public" / "static"
+app = Flask(__name__, static_folder=str(static_directory), static_url_path="/static")
 on_vercel = os.environ.get("VERCEL") == "1"
 database_url = os.environ.get("DATABASE_URL")
 secret_key = os.environ.get("SECRET_KEY")
