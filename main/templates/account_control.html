@@ -1,26 +1,39 @@
 {% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% from "_ui.html" import page_header, alerts %}
+
 {% block content %}
+{% set tabs = [('account', 'Profile', 'user'), ('account_wallet', 'Wallet', 'wallet')] %}
 
-<script src="static/home_page.js"></script>
+<div class="tw-scope font-sans antialiased text-gray-100 px-4 sm:px-6 lg:px-10 py-8 lg:py-10">
+<div class="mx-auto max-w-5xl space-y-6">
 
-<div class="account_settings_container" style="justify-content: left; align-items: normal">
-    <nav class="menu1">
-        <ul>
-            <li>
-                <div class="text_container">
-                    <img class="account_menubar" src="static/Resources/Icons/person.svg">
-                    <a href="{{ url_for('account') }}">Account</a>
-                </div>
-            </li>
-          <li>
-              <div class="text_container">
-                  <img class="account_menubar" src="static/Resources/Icons/wallet.svg">
-                  <a href="{{ url_for('account_wallet') }}">Wallet</a>
-              </div>
-          </li>
-        </ul>
-    </nav>
-    {% block settings_area %}{% endblock %}
+    {{ page_header('Settings', 'Your account', 'Manage your profile and the wallet that receives your on-chain trade receipts.') }}
+
+    <div class="grid gap-6 md:grid-cols-[13rem_1fr] md:items-start">
+        {# Section nav: sidebar on desktop, segmented tabs on phones #}
+        <nav aria-label="Account sections"
+             class="flex gap-1 rounded-xl bg-panel p-1 ring-1 ring-white/10 md:sticky md:top-24 md:flex-col md:p-2">
+            {% for ep, label, ic in tabs %}
+            <a href="{{ url_for(ep) }}"
+               class="flex flex-1 items-center justify-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium no-underline transition md:justify-start
+                      {{ 'bg-white/10 text-white' if request.endpoint == ep else 'text-gray-400 hover:bg-white/5 hover:text-white' }}"
+               {% if request.endpoint == ep %}aria-current="page"{% endif %}>
+                {{ icon(ic, 'h-4 w-4') }} {{ label }}
+                {% if ep == 'account_wallet' %}
+                    <span class="ml-auto hidden h-2 w-2 rounded-full md:block {{ 'bg-emerald-400' if current_user.wallet_public_key else 'bg-amber-400' }}"
+                          title="{{ 'Wallet linked' if current_user.wallet_public_key else 'No wallet linked' }}"></span>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </nav>
+
+        <div class="min-w-0 space-y-6">
+            {{ alerts() }}
+            {% block settings_area %}{% endblock %}
+        </div>
+    </div>
+
 </div>
-
+</div>
 {% endblock content %}

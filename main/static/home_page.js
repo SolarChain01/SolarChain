@@ -1,5 +1,6 @@
 window.addEventListener('scroll', function() {
     const video = document.querySelector('video');
+    if (!video) return; // only pages with a background video use this effect
     const scrollPosition = window.scrollY;
     const blurValue = Math.max(Math.min(scrollPosition / 100, 12), 0); // Adjust the denominator for sensitivity (100 in this case)
 

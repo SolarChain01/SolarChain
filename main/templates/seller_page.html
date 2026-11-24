@@ -1,75 +1,127 @@
 {% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% from "_ui.html" import CARD, money, units_label, page_header, stat_tile, empty_state, alerts, badge %}
+{% from "_auth_macros.html" import auth_field, auth_submit %}
+
 {% block content %}
+{% set orders = sell_orders|list %}
+{% set stored = current_user.units or 0 %}
+{% set listed = orders|map(attribute='units')|sum %}
+{% set can_list = [stored - listed, 0]|max %}
+{% set listed_value = namespace(total=0) %}
+{% for o in orders %}{% set listed_value.total = listed_value.total + o.units * o.price %}{% endfor %}
 
-<div class="content">
-    <div class="page">
-        <!-- Form to place a new sell order -->
-        <form method="POST" action="">
-            {{ form.hidden_tag() }}
-            <h1 class="heading">Your Sell Orders</h1>
-            <div class="horizontal_div">
-                <div class="form-group">
-                    {{ form.unit.label(class="label") }}
-                    {% if form.unit.errors %}
-                    {{ form.unit(class="input is-invalid") }}
-                    <div class="invalid-feedback">
-                        {% for error in form.unit.errors %}
-                        <span>{{ error }}</span>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    {{ form.unit(class="input") }}
-                    {% endif %}
+<div class="tw-scope font-sans antialiased text-gray-100 px-4 sm:px-6 lg:px-10 py-8 lg:py-10">
+<div class="mx-auto max-w-7xl space-y-6">
+
+    {% call page_header('Sell energy', 'Sell your surplus to neighbours',
+                        'List units from your home battery at your own price. Buyers on the marketplace can purchase them right away.') %}
+        <a href="{{ url_for('buyer_page') }}"
+           class="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-solar-blue ring-1 ring-solar-blue/30 no-underline hover:bg-solar-blue/10 transition">
+            {{ icon('cart', 'h-4 w-4') }} View marketplace
+        </a>
+    {% endcall %}
+
+    {{ alerts() }}
+
+    <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" aria-label="Selling summary">
+        {{ stat_tile('Stored in battery', units_label(stored), 'of ' ~ BATTERY_CAPACITY ~ ' max capacity', 'battery', 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/30') }}
+        {{ stat_tile('Listed for sale', units_label(listed), 'In ' ~ orders|length ~ ' active listing' ~ ('' if orders|length == 1 else 's'), 'tag', 'bg-solar-purple/20 text-violet-300 ring-solar-purple/40') }}
+        {{ stat_tile('Available to list', units_label(can_list), 'Stored minus already listed', 'bolt', 'bg-amber-400/10 text-amber-300 ring-amber-400/30') }}
+        {{ stat_tile('Listing value', money(listed_value.total), 'If every listing sells', 'trend', 'bg-solar-blue/15 text-solar-blue ring-solar-blue/30') }}
+    </section>
+
+    <div class="grid gap-6 lg:grid-cols-12 lg:items-start">
+
+        {# ---- New listing ---- #}
+        <section class="{{ CARD }} p-6 lg:col-span-5" aria-labelledby="new-listing">
+            <div class="flex items-center gap-3">
+                <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-solar-purple/20 text-violet-300 ring-1 ring-solar-purple/40">{{ icon('tag', 'h-5 w-5') }}</span>
+                <div>
+                    <h2 id="new-listing" class="text-base font-semibold text-white">Create a listing</h2>
+                    <p class="text-sm text-gray-400">You can list up to <strong class="text-white">{{ units_label(can_list) }}</strong>.</p>
                 </div>
-                <div class="form-group">
-                    {{ form.price.label(class="label") }}
-                    {% if form.price.errors %}
-                    {{ form.price(class="input is-invalid") }}
-                    <div class="invalid-feedback">
-                        {% for error in form.price.errors %}
-                        <span>{{ error }}</span>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    {{ form.price(class="input") }}
-                    {% endif %}
-                </div>
-                    <div class="form-btn">
-                        {{ form.submit(class="norm_btn") }}
-                    </div>
             </div>
-        </form>
 
-        {{ display_messages() }}
+            <form method="POST" action="" novalidate class="mt-6 space-y-5"
+                  x-data="{ loading: false, u: {{ form.unit.data|tojson|forceescape }}, p: {{ form.price.data|tojson|forceescape }}, max: {{ can_list }} }"
+                  @submit="loading = true">
+                {{ form.hidden_tag() }}
 
-        <!-- Table for listing existing sell orders -->
-        <table class="bordered">
-            <thead>
-            <tr>
-                <th scope="col">Order ID</th>
-                <th scope="col">Units Available</th>
-                <th scope="col">Price Per kWh</th>
-                <th scope="col">Status</th>
-                <th scope="col"></th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for order in sell_orders %}
-            <tr>
-                <td>{{ order.id }}</td>
-                <td>{{ order.units }}</td>
-                <td>Rs. {{ order.price }}</td>
-                <td>
-                    <div class="status"><p>{{ order.status }}</p></div>
-                </td>
-                <td>
-                    <a class="button" href="{{ url_for('cancel_sell_order', order_id=order.id) }}">Cancel</a>
-                </td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+                <div>
+                    {{ auth_field(form.unit, "Units to sell", "bolt", type="number", autocomplete="off",
+                                  attrs='min="1" step="1" inputmode="numeric" x-model.number="u"') }}
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        {% for n in [1, 5, 10] if n <= can_list %}
+                        <button type="button" @click="u = {{ n }}"
+                                class="rounded-md px-3 py-1 text-xs font-semibold text-gray-300 cursor-pointer ring-1 ring-white/10 hover:bg-white/5 hover:text-white">{{ n }}</button>
+                        {% endfor %}
+                        {% if can_list > 0 %}
+                        <button type="button" @click="u = max"
+                                class="rounded-md px-3 py-1 text-xs font-semibold text-violet-300 cursor-pointer ring-1 ring-solar-purple/40 hover:bg-solar-purple/10">Max ({{ can_list }})</button>
+                        {% endif %}
+                    </div>
+                    <p x-show="u > max" x-cloak class="mt-2 flex items-center gap-1.5 text-xs text-amber-300">
+                        {{ icon('warning', 'h-3.5 w-3.5') }} More than you have free to list ({{ can_list }}).
+                    </p>
+                </div>
+
+                {{ auth_field(form.price, "Price per unit (₹)", "tag", type="number", autocomplete="off",
+                              hint="Decimals are fine, e.g. 4.50.", attrs='min="0.01" step="0.01" inputmode="decimal" x-model.number="p"') }}
+
+                <div class="rounded-xl bg-white/[0.03] p-4 ring-1 ring-white/10">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-gray-400">You’ll earn if it all sells</span>
+                        <span class="text-xl font-bold text-white tabular-nums"
+                              x-text="'₹' + ((u || 0) * (p || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })">₹0.00</span>
+                    </div>
+                </div>
+
+                {{ auth_submit("List for sale", "Listing…") }}
+            </form>
+        </section>
+
+        {# ---- Active listings ---- #}
+        <section class="{{ CARD }} lg:col-span-7" aria-labelledby="my-listings">
+            <div class="flex items-center justify-between gap-3 border-b border-white/5 px-6 py-5">
+                <div>
+                    <h2 id="my-listings" class="text-base font-semibold text-white">Your active listings</h2>
+                    <p class="mt-0.5 text-sm text-gray-400">Visible to every buyer on the marketplace</p>
+                </div>
+                <span class="rounded-full bg-white/5 px-2.5 py-1 text-xs font-semibold text-gray-300 ring-1 ring-white/10">{{ orders|length }}</span>
+            </div>
+
+            {% if orders %}
+            <ul class="list-none divide-y divide-white/5">
+                {% for o in orders %}
+                <li class="flex flex-wrap items-center gap-x-4 gap-y-3 px-6 py-4">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-solar-purple/20 text-violet-300 ring-1 ring-solar-purple/40">{{ icon('bolt', 'h-5 w-5') }}</span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-semibold text-white">
+                            {{ units_label(o.units) }} at {{ money(o.price) }}<span class="font-normal text-gray-500">/unit</span>
+                        </p>
+                        <p class="text-xs text-gray-500">Order #{{ o.id }} · worth {{ money(o.units * o.price) }}</p>
+                    </div>
+                    {% if o.units > stored %}
+                        {{ badge('warn', 'Not enough stored') }}
+                    {% else %}
+                        {{ badge('good', 'Live') }}
+                    {% endif %}
+                    <a href="{{ url_for('cancel_sell_order', order_id=o.id) }}"
+                       @click="if (!confirm('Cancel listing #{{ o.id }}? Buyers will no longer see it.')) $event.preventDefault()"
+                       x-data
+                       class="inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-medium text-gray-300 ring-1 ring-white/10 no-underline hover:bg-red-500/10 hover:text-red-300 hover:ring-red-500/30 transition">
+                        Cancel
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+                {{ empty_state('tag', 'No active listings', 'Create your first listing to start earning from your surplus energy.') }}
+            {% endif %}
+        </section>
     </div>
-</div>
 
+</div>
+</div>
 {% endblock content %}

@@ -1,7 +1,6 @@
 {% extends "layout.html" %}
-{% from "_auth_macros.html" import auth_shell, auth_alerts, auth_field, auth_submit %}
-
-{% block head %}{% include "_tailwind_head.html" %}{% endblock head %}
+{% from "_auth_macros.html" import auth_shell, auth_field, auth_submit %}
+{% from "_ui.html" import alerts %}
 
 {% block content %}
 {% call auth_shell("Welcome back", "Trade solar energy peer-to-peer, secured on the Algorand blockchain.") %}
@@ -11,7 +10,7 @@
         <p class="mt-2 text-sm text-gray-400">Enter your credentials to access your dashboard.</p>
     </div>
 
-    {{ auth_alerts() }}
+    {{ alerts("mb-6") }}
 
     <form method="POST" action="" novalidate x-data="{ loading: false }" @submit="loading = true" class="space-y-5">
         {{ form.hidden_tag() }}

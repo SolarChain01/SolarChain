@@ -53,6 +53,7 @@
 
 <style>
     [x-cloak] { display: none !important; }
+    .tw-scope { color-scheme: dark; }
 
     /* Minimal preflight, scoped to Tailwind sections only. :where() keeps specificity
        low so Tailwind utility classes always win. */
@@ -63,7 +64,7 @@
         border-color: rgba(255, 255, 255, 0.1);
     }
     :where(.tw-scope) h1, :where(.tw-scope) h2, :where(.tw-scope) h3,
-    :where(.tw-scope) p, :where(.tw-scope) ul { margin: 0; padding: 0; }
+    :where(.tw-scope) p, :where(.tw-scope) ul, :where(.tw-scope) ol, :where(.tw-scope) dl { margin: 0; padding: 0; }
     :where(.tw-scope) img, :where(.tw-scope) svg { display: block; }
     :where(.tw-scope) input { font: inherit; }
 

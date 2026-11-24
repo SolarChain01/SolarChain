@@ -1,38 +1,6 @@
 {% extends "layout.html" %}
 {% from "_icons.html" import icon %}
-{% from "_auth_macros.html" import auth_alerts %}
-
-{% block head %}{% include "_tailwind_head.html" %}{% endblock head %}
-
-{# ---------- helpers ---------- #}
-{% macro money(x) -%}
-{{ '−' if x < 0 else '' }}₹{{ '{:,.2f}'.format(x|abs) }}
-{%- endmacro %}
-
-{% macro units_label(n) -%}
-{{ n }} unit{{ '' if n == 1 else 's' }}
-{%- endmacro %}
-
-{% macro stars(n, cls='text-sm') -%}
-<span class="inline-flex gap-px {{ cls }}" aria-label="{{ n }} out of 5 stars" title="{{ n }} / 5">
-    {%- for i in range(5) -%}
-    <span class="{{ 'text-amber-400' if i < n else 'text-white/15' }}">★</span>
-    {%- endfor -%}
-</span>
-{%- endmacro %}
-
-{% macro avatar(name, cls='h-10 w-10 text-sm') -%}
-<span class="flex {{ cls }} shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-solar-blue to-solar-purple font-bold uppercase text-white ring-2 ring-white/10">
-    {{ (name or '?')[0] }}
-</span>
-{%- endmacro %}
-
-{% macro card_title(title, sub=None) -%}
-<div>
-    <h2 class="text-base font-semibold text-white">{{ title }}</h2>
-    {% if sub %}<p class="mt-0.5 text-sm text-gray-400">{{ sub }}</p>{% endif %}
-</div>
-{%- endmacro %}
+{% from "_ui.html" import CARD, money, units_label, stars, avatar, alerts %}
 
 {# Battery status: always shown as icon + label, never colour alone #}
 {% if battery_pct >= 90 %}
@@ -45,7 +13,7 @@
     {% set b_label, b_icon, b_badge, b_fill = 'Critically low', 'warning', 'bg-red-500/10 text-red-300 ring-red-500/30', 'from-red-600 to-red-400' %}
 {% endif %}
 
-{% set card = 'rounded-2xl bg-panel ring-1 ring-white/10 shadow-xl shadow-black/20' %}
+{% set card = CARD %}
 {% set net = stats.earned - stats.spent %}
 
 {% block content %}
@@ -81,15 +49,10 @@
                     <p class="flex items-center gap-1.5 text-xs text-gray-400">ID #{{ current_user.id }} · {{ stars(current_user.seller_rep or 0, 'text-xs') }}</p>
                 </div>
             </div>
-
-            <a href="{{ url_for('logout') }}" title="Sign out"
-               class="inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium text-gray-300 ring-1 ring-white/10 no-underline hover:bg-white/5 hover:text-white transition">
-                {{ icon('logout', 'h-4 w-4') }} Sign out
-            </a>
         </div>
     </header>
 
-    {% if get_flashed_messages() %}<div>{{ auth_alerts() }}</div>{% endif %}
+    {{ alerts() }}
 
     {# ================= Battery + energy flow ================= #}
     <div class="grid gap-6 lg:grid-cols-12">
@@ -101,17 +64,17 @@
                     <h2 id="battery-title" class="text-base font-semibold text-white">Home battery</h2>
                     <p class="mt-0.5 text-sm text-gray-400">Electricity stored at your house</p>
                 </div>
-                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 {{ b_badge }}">
+                <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1 {{ b_badge }}">
                     {{ icon(b_icon, 'h-3.5 w-3.5') }} {{ b_label }}
                 </span>
             </div>
 
-            <div class="mt-6 flex flex-1 items-center gap-8">
+            <div class="mt-6 flex flex-1 items-center gap-5 sm:gap-8">
                 {# Battery graphic #}
                 <div class="flex flex-col items-center" role="meter" aria-valuemin="0" aria-valuemax="{{ capacity }}"
                      aria-valuenow="{{ units }}" aria-label="Battery level: {{ units }} of {{ capacity }} units">
-                    <div class="h-3 w-12 rounded-t-md bg-white/15"></div>
-                    <div class="relative h-56 w-28 overflow-hidden rounded-2xl bg-field p-1.5 ring-2 ring-white/15">
+                    <div class="h-3 w-10 sm:w-12 rounded-t-md bg-white/15"></div>
+                    <div class="relative h-48 w-24 sm:h-56 sm:w-28 overflow-hidden rounded-2xl bg-field p-1.5 ring-2 ring-white/15">
                         <div class="relative h-full w-full overflow-hidden rounded-xl">
                             <div class="absolute inset-x-0 bottom-0 origin-bottom rounded-xl bg-gradient-to-t {{ b_fill }} motion-safe:animate-grow-up"
                                  style="height: {{ battery_pct }}%;">
@@ -134,23 +97,23 @@
                 <div class="min-w-0">
                     <p class="text-xs font-medium uppercase tracking-wider text-gray-500">Units available</p>
                     <p class="mt-1 flex items-baseline gap-1.5">
-                        <span class="text-6xl font-extrabold tracking-tight text-white tabular-nums">{{ units }}</span>
+                        <span class="text-5xl sm:text-6xl font-extrabold tracking-tight text-white tabular-nums">{{ units }}</span>
                         <span class="text-lg font-semibold text-gray-500">/ {{ capacity }}</span>
                     </p>
                     <p class="text-sm text-gray-400">{{ battery_pct }}% of max capacity</p>
 
                     <dl class="mt-6 space-y-3 text-sm">
-                        <div class="flex items-center justify-between gap-6">
+                        <div class="flex items-center justify-between gap-4">
                             <dt class="text-gray-400">Max capacity</dt>
-                            <dd class="m-0 font-semibold text-white tabular-nums">{{ capacity }} units</dd>
+                            <dd class="m-0 whitespace-nowrap font-semibold text-white tabular-nums">{{ capacity }} units</dd>
                         </div>
-                        <div class="flex items-center justify-between gap-6">
+                        <div class="flex items-center justify-between gap-4">
                             <dt class="text-gray-400">Free space</dt>
-                            <dd class="m-0 font-semibold text-white tabular-nums">{{ units_label(free_space) }}</dd>
+                            <dd class="m-0 whitespace-nowrap font-semibold text-white tabular-nums">{{ units_label(free_space) }}</dd>
                         </div>
-                        <div class="flex items-center justify-between gap-6">
+                        <div class="flex items-center justify-between gap-4">
                             <dt class="text-gray-400">Listed for sale</dt>
-                            <dd class="m-0 font-semibold text-white tabular-nums">{{ units_label(listed_units) }}</dd>
+                            <dd class="m-0 whitespace-nowrap font-semibold text-white tabular-nums">{{ units_label(listed_units) }}</dd>
                         </div>
                     </dl>
                 </div>
@@ -174,12 +137,12 @@
             </div>
 
             {# Flow diagram: Solar -> Battery <-> Community #}
-            <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+            <div class="grid grid-cols-3 gap-2 sm:flex sm:flex-row sm:items-center sm:gap-3">
                 {# Solar node #}
-                <div class="flex-1 rounded-xl bg-white/[0.03] p-4 text-center ring-1 ring-white/10">
-                    <span class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30">{{ icon('sun', 'h-6 w-6') }}</span>
-                    <p class="mt-2 text-sm font-semibold text-white">Solar panels</p>
-                    <p class="text-xs text-gray-400">Generating at home</p>
+                <div class="flex-1 rounded-xl bg-white/[0.03] p-2.5 sm:p-4 text-center ring-1 ring-white/10">
+                    <span class="mx-auto flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30">{{ icon('sun', 'h-6 w-6') }}</span>
+                    <p class="mt-2 text-xs sm:text-sm font-semibold text-white">Solar panels</p>
+                    <p class="text-[11px] sm:text-xs text-gray-400">Generating at home</p>
                 </div>
 
                 {# Solar -> battery connector #}
@@ -190,10 +153,10 @@
                 </div>
 
                 {# Battery node #}
-                <div class="flex-1 rounded-xl bg-gradient-to-br from-solar-blue/15 to-solar-purple/15 p-4 text-center ring-1 ring-solar-purple/40">
-                    <span class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-solar-blue to-solar-purple text-white shadow-lg shadow-solar-purple/30">{{ icon('home', 'h-6 w-6') }}</span>
-                    <p class="mt-2 text-sm font-semibold text-white">Your home</p>
-                    <p class="text-xs text-gray-400 tabular-nums">{{ units }} / {{ capacity }} units stored</p>
+                <div class="flex-1 rounded-xl bg-gradient-to-br from-solar-blue/15 to-solar-purple/15 p-2.5 sm:p-4 text-center ring-1 ring-solar-purple/40">
+                    <span class="mx-auto flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-gradient-to-br from-solar-blue to-solar-purple text-white shadow-lg shadow-solar-purple/30">{{ icon('home', 'h-6 w-6') }}</span>
+                    <p class="mt-2 text-xs sm:text-sm font-semibold text-white">Your home</p>
+                    <p class="text-[11px] sm:text-xs text-gray-400 tabular-nums">{{ units }} / {{ capacity }} units stored</p>
                 </div>
 
                 {# Battery <-> community connectors #}
@@ -211,10 +174,10 @@
                 </div>
 
                 {# Community node #}
-                <div class="flex-1 rounded-xl bg-white/[0.03] p-4 text-center ring-1 ring-white/10">
-                    <span class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-sky-400/15 text-sky-300 ring-1 ring-sky-400/30">{{ icon('users', 'h-6 w-6') }}</span>
-                    <p class="mt-2 text-sm font-semibold text-white">Neighbours</p>
-                    <p class="text-xs text-gray-400 tabular-nums">{{ market_offer_count }} offer{{ '' if market_offer_count == 1 else 's' }} · {{ units_label(market_units) }}</p>
+                <div class="flex-1 rounded-xl bg-white/[0.03] p-2.5 sm:p-4 text-center ring-1 ring-white/10">
+                    <span class="mx-auto flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-sky-400/15 text-sky-300 ring-1 ring-sky-400/30">{{ icon('users', 'h-6 w-6') }}</span>
+                    <p class="mt-2 text-xs sm:text-sm font-semibold text-white">Neighbours</p>
+                    <p class="text-[11px] sm:text-xs text-gray-400 tabular-nums">{{ market_offer_count }} offer{{ '' if market_offer_count == 1 else 's' }} · {{ units_label(market_units) }}</p>
                 </div>
             </div>
 

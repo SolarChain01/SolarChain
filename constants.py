@@ -15,3 +15,7 @@ else:
     ALGOD_SERVER_ADDRESS = "https://testnet-api.4160.nodely.dev"  # Default AlgoKit LocalNet endpoint
     INDEXER_ADDRESS = "https://testnet-idx.4160.nodely.dev"
     INDEXER_TOKEN = ""
+
+# Block explorer used for "view on Pera" links (LocalNet has no public explorer)
+NETWORK_NAME = "LocalNet" if LOCAL_NET else "TestNet"
+PERA_EXPLORER_URL = None if LOCAL_NET else "https://testnet.explorer.perawallet.app"

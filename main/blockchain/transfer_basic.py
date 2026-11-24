@@ -15,10 +15,12 @@ FEES = 1_000
 PRICE = 2_000
 
 def begin_transaction(units: int):
+    """Run the on-chain purchase. Raises if any step fails so the caller can report it."""
     try:
         __begin_transaction__(units)
     except Exception as e:
         print("Failed to begin transaction:", e)
+        raise
 
 def __begin_transaction__(units: int):
     if LOCAL_NET:

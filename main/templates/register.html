@@ -1,7 +1,6 @@
 {% extends "layout.html" %}
-{% from "_auth_macros.html" import auth_shell, auth_alerts, auth_field, auth_submit %}
-
-{% block head %}{% include "_tailwind_head.html" %}{% endblock head %}
+{% from "_auth_macros.html" import auth_shell, auth_field, auth_submit %}
+{% from "_ui.html" import alerts %}
 
 {% block content %}
 {% call auth_shell("Join the energy network", "Create an account to start buying and selling solar energy with your community.") %}
@@ -11,7 +10,7 @@
         <p class="mt-2 text-sm text-gray-400">It only takes a minute to get started.</p>
     </div>
 
-    {{ auth_alerts() }}
+    {{ alerts("mb-6") }}
 
     <form method="POST" action="" novalidate
           x-data="{ loading: false, pw: '', pw2: '' }" @submit="loading = true" class="space-y-5">

@@ -63,30 +63,6 @@
 {%- endmacro %}
 
 
-{# Flash messages rendered as alert boxes. #}
-{% macro auth_alerts() -%}
-{% with messages = get_flashed_messages(with_categories=true) %}
-{% if messages %}
-<div class="mb-6 space-y-3" role="status">
-    {% for category, message in messages %}
-        {% if category == 'success' %}
-            {% set tone, ic = 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', 'check-circle' %}
-        {% elif category in ('danger', 'error') %}
-            {% set tone, ic = 'border-red-500/30 bg-red-500/10 text-red-300', 'alert-circle' %}
-        {% else %}
-            {% set tone, ic = 'border-solar-blue/30 bg-solar-blue/10 text-sky-300', 'info' %}
-        {% endif %}
-        <div class="flex items-start gap-3 rounded-lg border px-4 py-3 text-sm {{ tone }}">
-            {{ icon(ic, 'h-5 w-5 shrink-0') }}
-            <span>{{ message }}</span>
-        </div>
-    {% endfor %}
-</div>
-{% endif %}
-{% endwith %}
-{%- endmacro %}
-
-
 {#
     One labelled input.
       field        : WTForms field
