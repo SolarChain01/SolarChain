@@ -60,7 +60,7 @@ Ensure the following pre-requisites are installed and properly configured:
 > Pycharm was the IDE used.
 
 # Running the program.
-Run [`main.py`](main.py) and navigate to the [website](http://127.0.0.1:5000/).
+Run [`app.py`](app.py) and navigate to the [website](http://127.0.0.1:5000/).
 
 For standalone smart contract testing navigate to [Standalone file](playground/basic_transfer.py)
 > NOTE: If using localnet you will have to create new localnet accounts and asset for testing on localnet. If doing so then mention the new accounts' mnemonic in [this file](account_constants.py) in the `ACCOUNTS_LOCAL` list and update the `ASSET_ID_LOCAL_NET` variable to the new asset's ID. See [this file](playground/asset_creation.py) to create a new asset for localnet.
@@ -92,7 +92,7 @@ Contributions are welcome—check out our code and join us in revolutionizing en
 
 # Deploy the website to Vercel
 
-Deploy the root Flask application from branch `algo-show`. The nested
+Deploy the root Flask application (app.py) from branch `algo-show`. The nested
 `SolarChain/projects/SolarChain` directory contains contract development tools;
 it is not a second web service.
 

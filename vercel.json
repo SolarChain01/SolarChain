@@ -3,7 +3,7 @@
   "framework": "flask",
   "buildCommand": "python build_vercel.py",
   "functions": {
-    "main.py": {
+    "app.py": {
       "maxDuration": 300,
       "excludeFiles": "{.venv/**,tests/**,playground/**,instance/**,public/**,main/static/**,*.mp4,**/__pycache__/**,**/*.pyc}"
     }

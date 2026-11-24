@@ -128,3 +128,34 @@ def test_vercel_requires_persistent_config():
                             env=environment, capture_output=True, text=True)
     assert result.returncode != 0
     assert "Set DATABASE_URL and SECRET_KEY" in result.stderr
+
+
+def test_vercel_entrypoint_loads_without_shadowing_package():
+    """Load the configured file under its module name, as Vercel does."""
+    import subprocess
+    import sys
+
+    environment = dict(os.environ, VERCEL="0", SECRET_KEY="test-only", DATABASE_URL="sqlite://")
+    code = """
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from flask import Flask
+
+entrypoint = Path(next(iter(json.loads(Path("vercel.json").read_text())["functions"])))
+spec = importlib.util.spec_from_file_location(entrypoint.stem, entrypoint.resolve())
+module = importlib.util.module_from_spec(spec)
+sys.modules[entrypoint.stem] = module
+spec.loader.exec_module(module)
+assert isinstance(module.app, Flask)
+import main
+assert hasattr(main, "__path__"), "main must resolve to the package, not the entrypoint"
+assert module.app is main.app
+client = module.app.test_client()
+assert client.get("/").status_code == 302
+assert client.get("/login").status_code == 200
+"""
+    result = subprocess.run([sys.executable, "-B", "-c", code], env=environment,
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
