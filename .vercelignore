@@ -1,0 +1,12 @@
+.venv/
+.git/
+.vercel/
+**/__pycache__/
+**/*.pyc
+instance/
+tests/
+playground/
+/*.mp4
+.env
+.env.*
+!.env.example

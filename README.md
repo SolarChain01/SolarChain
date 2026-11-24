@@ -89,3 +89,46 @@ The following tools are in use:
 - [Flask](https://flask.palletsprojects.com/en/stable/): For backend
 
 Contributions are welcome—check out our code and join us in revolutionizing energy sharing!
+
+# Deploy the website to Vercel
+
+Deploy the root Flask application from branch `algo-show`. The nested
+`SolarChain/projects/SolarChain` directory contains contract development tools;
+it is not a second web service.
+
+1. Create a PostgreSQL database in [Neon](https://neon.tech) (or connect Neon through
+   the [Vercel Marketplace](https://vercel.com/docs/postgres)). Copy its pooled
+   connection string, including the SSL query parameters.
+2. Import the GitHub repository in Vercel. Select **Import single project** for
+   **app / Flask**, root directory **./**, and the **Flask** framework preset.
+   Use **algo-show** as the production branch
+   (Settings > Environments > Production > Branch Tracking).
+3. Set **DATABASE_URL** to the Neon connection string and **SECRET_KEY** to a
+   random secret in Vercel's environment variables. Generate a secret locally with:
+   `py -3.12 -c "import secrets; print(secrets.token_hex(32))"`.
+   Add the values to the environments you intend to deploy.
+4. Leave install/output overrides unset. The committed `vercel.json` selects
+   Flask and runs `python build_vercel.py` to publish assets at their existing
+   `/static/...` URLs. Deploy (or redeploy after setting variables).
+5. Open the deployed URL and register an account. Missing tables are created
+   automatically. The hosted database starts empty: this does not upload or migrate
+   the local `instance/main.db` file.
+
+Accounts, listings, trade history, and purchase status use PostgreSQL and survive
+redeployments. Local runs still use SQLite when DATABASE_URL is unset. Environment
+files are examples only; export variables in your shell or set them in Vercel.
+
+Vercel purchases finish blockchain work within the request, with a 300-second
+function limit. This is a simple deployment, not a durable job queue: timeouts
+still need investigation rather than blindly retrying a trade. Existing behavior
+records energy changes before blockchain confirmation; a failed on-chain write
+does not roll those changes back. Real TestNet purchases still require the
+accounts and asset in `account_constants.py` to be valid and funded.
+Arduino connections remain in process memory and are not coordinated across
+Vercel instances; use the local server for the hardware demonstration.
+
+The original toolchain is preserved in `requirements-dev.txt`.
+Deployment tests (mocked blockchain; isolated SQLite, not a live Neon database):
+`python -m pytest tests/test_web_deployment.py -q`.
+
+Reference: [Flask on Vercel](https://vercel.com/docs/frameworks/backend/flask).

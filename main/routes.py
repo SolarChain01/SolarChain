@@ -15,15 +15,12 @@ from sqlalchemy import or_  # SQLAlchemy operator for OR conditions
 
 from Arduino import arduiino_util
 from constants import BATTERY_CAPACITY, NETWORK_NAME
-from main import app, bcrypt, db, algo_client, \
-    transaction_status  # Flask app instance, bcrypt for hashing, and database
+from main import app, bcrypt, db, algo_client
 from main.blockchain.receipts import explorer_address_url, is_valid_address, send_trade_receipts
 from main.blockchain.transfer_basic import begin_transaction
 from main.forms import LoginForm, PurchaseForm, RegistrationForm, SellOrderForm  # WTForms for handling forms
-from main.models import SellOrder, TransactionHistory, User, get_sellers  # Database models and utility function
+from main.models import SellOrder, TransactionHistory, TransactionProgress, User, get_sellers  # Database models and utility function
 
-# Extra info per purchase (receipt links etc.), keyed like transaction_status: {tx_id: {...}}
-transaction_details = {}
 
 @app.context_processor
 def inject_constants():
@@ -336,7 +333,9 @@ def checkout_page():
                 if buyer.units + form.units.data <= BATTERY_CAPACITY:
 
                     tx_id = str(uuid.uuid4())
-                    transaction_status[tx_id] = "processing"
+                    db.session.add(TransactionProgress(
+                        id=tx_id, buyer_id=buyer.id, seller_id=seller.id
+                    ))
 
                     buyer.units += units
                     order.units -= units
@@ -365,12 +364,14 @@ def checkout_page():
                         {"role": "seller", "address": seller.wallet_public_key,
                          "note": f"Sold {units} energy unit(s) to {buyer.username} for Rs {total_price:,.2f}"},
                     ]
-                    transaction_details[tx_id] = {"buyer_id": buyer.id, "seller_id": seller.id, "receipts": []}
-                    threading.Thread(
-                        target=process_blockchain_transaction,
-                        args=(tx_id, units, receipts),
-                        daemon=True
-                    ).start()
+                    if app.config["BLOCKCHAIN_INLINE"]:
+                        process_blockchain_transaction(tx_id, units, receipts)
+                    else:
+                        threading.Thread(
+                            target=process_blockchain_transaction,
+                            args=(tx_id, units, receipts),
+                            daemon=True
+                        ).start()
 
                     arduiino_util.initiate_transfer(units)
 
@@ -389,21 +390,26 @@ def process_blockchain_transaction(tx_id, units, receipts):
     The status only becomes "done" after the blockchain transaction has actually succeeded.
     """
     with app.app_context():
+        progress = db.session.get(TransactionProgress, tx_id)
+        if progress is None:
+            return
         try:
             begin_transaction(units)
         except Exception as e:
             print("Blockchain transaction failed:", e)
-            transaction_status[tx_id] = "error"
+            progress.status = "error"
+            db.session.commit()
             return
 
         # Receipts are best-effort: a failure here doesn't undo a successful purchase
         try:
-            transaction_details[tx_id]["receipts"] = send_trade_receipts(receipts)
+            progress.receipts = send_trade_receipts(receipts)
         except Exception as e:
             print("Sending wallet receipts failed:", e)
-            transaction_details[tx_id]["receipt_error"] = True
+            progress.receipt_error = True
 
-        transaction_status[tx_id] = "done"
+        progress.status = "done"
+        db.session.commit()
 
 @app.route("/transaction_processing/<tx_id>")
 @login_required
@@ -413,14 +419,12 @@ def transaction_processing(tx_id):
 @app.route("/transaction_status/<tx_id>")
 @login_required
 def transaction_status_api(tx_id):
-    """Poll target for the processing page. Unknown ids (e.g. after a restart) report "unknown"."""
-    status = transaction_status.get(tx_id, "unknown")
-    details = transaction_details.get(tx_id, {})
-    if current_user.id not in (details.get("buyer_id"), details.get("seller_id")):
-        details = {}
-    # Only show the current user their own receipt
-    receipts = [r for r in details.get("receipts", []) if r["address"] == current_user.wallet_public_key]
-    return {"status": status, "receipts": receipts, "receipt_error": bool(details.get("receipt_error"))}
+    """Read shared status; receipt details are visible only to trade participants."""
+    progress = db.session.get(TransactionProgress, tx_id)
+    if progress is None or current_user.id not in (progress.buyer_id, progress.seller_id):
+        return {"status": "unknown", "receipts": [], "receipt_error": False}
+    receipts = [r for r in progress.receipts if r["address"] == current_user.wallet_public_key]
+    return {"status": progress.status, "receipts": receipts, "receipt_error": progress.receipt_error}
 
 def get_user_sell_orders():
     """
