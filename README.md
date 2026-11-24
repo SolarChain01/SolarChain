@@ -1,5 +1,5 @@
 # Solar Chain
-![](main%2Fstatic%2FResources%2FScreenshots%2Fimg.png)
+![](public%2Fstatic%2FResources%2FScreenshots%2Fimg.png)
 *A Peer-to-Peer Energy Trading Platform*
 
 # Table of Contents
@@ -14,7 +14,7 @@
 This project enables a decentralized platform for trading surplus solar energy using blockchain technology. Our solution empowers individuals and businesses to take full control of their surplus energy. We’re building a future where clean energy is accessible, affordable, and efficient for everyone.
 
 Our platform ensures transparency, security, and efficiency using blockchain technology.
-![blockchain.png](main%2Fstatic%2FResources%2Fimages%2Fblockchain.png)
+![blockchain.png](public%2Fstatic%2FResources%2Fimages%2Fblockchain.png)
 
 # Project demonstration
 
@@ -25,8 +25,8 @@ https://github.com/user-attachments/assets/db471aab-fb2c-4275-aa5f-2092dedd6da2
 ## Directories
 - [*doc*](doc): Documentations
 - [*instance*](instance): Database location and other files 
+- [*public/static*](public/static): CSS, JavaScript, images and videos served by Vercel's CDN or Flask locally
 - [*main*](main):  Contains all the main scripts
-  - [*static*](main/static): JS, CSS and other resources
   - [*templates*](main/templates): HTML webpages
 - [*tests*](tests): Contain all the tests for our project
 - [*util*](util): Helpful tools
@@ -108,8 +108,8 @@ it is not a second web service.
    `py -3.12 -c "import secrets; print(secrets.token_hex(32))"`.
    Add the values to the environments you intend to deploy.
 4. Leave install/output overrides unset. The committed `vercel.json` selects
-   Flask and runs `python build_vercel.py` to publish assets at their existing
-   `/static/...` URLs. Deploy (or redeploy after setting variables).
+   Flask. Assets are committed in `public/static` and served at their existing
+   `/static/...` URLs without a build copy. Deploy (or redeploy after setting variables).
 5. Open the deployed URL and register an account. Missing tables are created
    automatically. The hosted database starts empty: this does not upload or migrate
    the local `instance/main.db` file.

@@ -1,11 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "flask",
-  "buildCommand": "python build_vercel.py",
   "functions": {
     "app.py": {
       "maxDuration": 300,
-      "excludeFiles": "{.venv/**,tests/**,playground/**,instance/**,public/**,main/static/**,*.mp4,**/__pycache__/**,**/*.pyc}"
+      "excludeFiles": "{.venv/**,tests/**,playground/**,instance/**,public/**,*.mp4,**/__pycache__/**,**/*.pyc}"
     }
   }
 }
