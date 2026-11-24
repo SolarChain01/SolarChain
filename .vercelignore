@@ -10,3 +10,4 @@ playground/
 .env
 .env.*
 !.env.example
+tools/
