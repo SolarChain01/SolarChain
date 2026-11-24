@@ -61,7 +61,7 @@ class SellOrder(db.Model):
 
     Attributes:
         id (int): Primary key for the sell order.
-        user_id (str): Foreign key linking to the seller's user ID.
+        user_id (int): Foreign key linking to the seller's user ID.
         units (int): Number of units in the sell order.
         price (float): Price per unit in the sell order.
         status (int): Status of the order (default is 0).
@@ -71,7 +71,7 @@ class SellOrder(db.Model):
         __repr__(): Provides a string representation of the sell order.
     """
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(50), db.ForeignKey("user.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     units = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Double, nullable=False)
     status = db.Column(db.Integer, nullable=False, default=0)
@@ -102,6 +102,16 @@ class TransactionHistory(db.Model):
     units = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Double, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
+
+
+class TransactionProgress(db.Model):
+    """Shared purchase status and receipt links, persisted across function instances."""
+    id = db.Column(db.String(36), primary_key=True)
+    buyer_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    seller_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="processing")
+    receipts = db.Column(db.JSON, nullable=False, default=list)
+    receipt_error = db.Column(db.Boolean, nullable=False, default=False)
 
 
 # Utility function to retrieve all sellers from the database
